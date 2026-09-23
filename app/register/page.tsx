@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
@@ -10,12 +10,32 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { HandHeart, ArrowRight, ShieldCheck, CheckCircle2, Eye, EyeOff, Sparkles, MapPin } from 'lucide-react';
 import LocationPicker from '@/components/location/LocationPicker';
+import { cn } from '@/lib/utils';
+import { UserRole, Department, DepartmentItem } from '@/types';
+import { subscribeDepartments, DEFAULT_DEPARTMENTS } from '@/services/departments.service';
 
 export default function Register() {
+  const [role, setRole] = useState<UserRole>('user');
+  const [department, setDepartment] = useState<string>('Plumbing');
+  const [departmentList, setDepartmentList] = useState<DepartmentItem[]>(DEFAULT_DEPARTMENTS);
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [area, setArea] = useState('');
   const [coordinates, setCoordinates] = useState<{lat: number, lng: number} | null>(null);
+
+  // Subscribe to real-time departments from Firestore so all admin-created departments appear
+  useEffect(() => {
+    const unsub = subscribeDepartments((depts) => {
+      if (depts && depts.length > 0) {
+        setDepartmentList(depts);
+        setDepartment(prev => {
+          if (depts.some(d => d.name === prev || d.id === prev)) return prev;
+          return depts[0].name || depts[0].id || 'Plumbing';
+        });
+      }
+    });
+    return () => unsub();
+  }, []);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -57,6 +77,9 @@ export default function Register() {
         phone: cleanedPhone,
         area,
         coordinates,
+        role,
+        department: role === 'employee' ? department : null,
+        status: 'active',
         onboardingCompleted: true,
         createdAt: new Date().toISOString()
       }, { merge: true });
@@ -140,13 +163,58 @@ export default function Register() {
 
           <div className="bg-white border border-slate-200/85 rounded-2xl p-5 sm:p-6 shadow-xs backdrop-blur-xl">
             <form onSubmit={handleRegister} className="space-y-3.5">
-              {error && (
-                <div className="bg-rose-50 border border-rose-200 text-rose-600 p-3 rounded-xl text-xs font-semibold flex items-start gap-2 animate-in fade-in">
-                  <ShieldCheck className="h-4 w-4 shrink-0 text-rose-500 mt-0.2" />
-                  <span>{error}</span>
+              {/* Account Type / Role Selector */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-semibold text-slate-600">Register As</label>
+                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setRole('user')}
+                    className={cn(
+                      "py-1.5 text-xs font-semibold rounded-lg transition-all",
+                      role === 'user'
+                        ? "bg-white text-blue-600 shadow-xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    )}
+                  >
+                    👤 Citizen / User
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRole('employee')}
+                    className={cn(
+                      "py-1.5 text-xs font-semibold rounded-lg transition-all",
+                      role === 'employee'
+                        ? "bg-white text-indigo-600 shadow-xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    )}
+                  >
+                    👷 Service Employee
+                  </button>
+                </div>
+              </div>
+
+              {/* Department Dropdown for Employee */}
+              {role === 'employee' && (
+                <div className="space-y-1 p-3 bg-indigo-50/60 border border-indigo-100 rounded-xl animate-in fade-in">
+                  <label className="text-[11px] font-semibold text-indigo-900 flex items-center justify-between">
+                    <span>Assigned Department</span>
+                    <span className="text-[10px] text-indigo-600">Only receive tasks in this category</span>
+                  </label>
+                  <select
+                    value={department}
+                    onChange={(e) => setDepartment(e.target.value)}
+                    className="w-full h-9 rounded-xl bg-white border border-indigo-200 text-slate-900 text-xs px-3 focus:outline-none focus:border-indigo-600 font-medium"
+                  >
+                    {departmentList.map((dept) => (
+                      <option key={dept.id || dept.name} value={dept.name || dept.id}>
+                        {dept.icon || '🛠️'} {dept.name} Department
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
-              
+
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold text-slate-600">Full Name</label>
                 <Input

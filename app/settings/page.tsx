@@ -23,6 +23,7 @@ import {
   FileText
 } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
+import { resolveCoordinates } from '@/lib/distance';
 
 export default function SettingsPage() {
   const { user, profile, refreshProfile, loading: authLoading } = useAuth();
@@ -96,12 +97,13 @@ export default function SettingsPage() {
 
     setProfileLoading(true);
     try {
+      const resolvedCoords = resolveCoordinates(coordinates, area.trim());
       const userDocRef = doc(db, 'users', user.uid);
       await setDoc(userDocRef, {
         fullName: fullName.trim(),
         phone: phone.replace(/\D/g, ''),
         area: area.trim(),
-        coordinates: coordinates || null,
+        coordinates: resolvedCoords || coordinates || null,
         bio: bio.trim(),
         updatedAt: new Date().toISOString()
       }, { merge: true });

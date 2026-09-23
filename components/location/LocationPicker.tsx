@@ -5,6 +5,8 @@ import dynamic from 'next/dynamic';
 import { MapPin, Navigation } from 'lucide-react';
 import { Button } from '../ui/Button';
 
+import { resolveCoordinates, Coordinates } from '@/lib/distance';
+
 // Dynamically import Leaflet Map to completely prevent SSR window errors
 const LocationPickerMap = dynamic(() => import('./LocationPickerMap'), {
   ssr: false,
@@ -46,6 +48,45 @@ export default function LocationPicker({
       setPosition(initialCoordinates);
     }
   }, [initialCoordinates]);
+
+  // Debounced forward geocoding for typed text to get exact coordinates
+  useEffect(() => {
+    if (!address || address.length < 3 || address.includes('@')) return;
+
+    // First attempt instant local resolution
+    const localMatch = resolveCoordinates(null, address);
+    if (localMatch) {
+      setPosition(localMatch);
+      onLocationSelect(address, localMatch);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const query = encodeURIComponent(`${address.trim()}, Kerala, India`);
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`);
+        const data = await res.json();
+        if (data && data.length > 0) {
+          const lat = parseFloat(data[0].lat);
+          const lng = parseFloat(data[0].lon);
+          if (!isNaN(lat) && !isNaN(lng)) {
+            const newCoords = { lat, lng };
+            setPosition(newCoords);
+            onLocationSelect(address, newCoords);
+          }
+        }
+      } catch (e) {
+        // Silently fallback to deterministic local coords
+        const fallback = resolveCoordinates(null, address);
+        if (fallback) {
+          setPosition(fallback);
+          onLocationSelect(address, fallback);
+        }
+      }
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [address]);
 
   // Reverse Geocoding to get readable address from coordinates
   const fetchAddress = async (lat: number, lng: number) => {
@@ -109,7 +150,11 @@ export default function LocationPicker({
           onChange={(e) => {
             const val = e.target.value;
             setAddress(val);
-            onLocationSelect(val, position || undefined);
+            const instantCoords = resolveCoordinates(position, val);
+            if (instantCoords) {
+              setPosition(instantCoords);
+            }
+            onLocationSelect(val, instantCoords || position || undefined);
           }}
           required
         />

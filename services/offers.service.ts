@@ -133,14 +133,17 @@ export const acceptHelpOffer = async (
     const taskRef = doc(collection(db, 'helpTasks'));
     transaction.set(taskRef, {
       requestId: request.id,
-      requesterId: currentData.requesterId,
-      requesterName: currentData.requesterName,
+      requesterId: currentData.requesterId || request.requesterId || '',
+      requesterName: currentData.requesterName || request.requesterName || 'Resident',
       helperId: selectedOffer.helperId,
       helperName: selectedOffer.helperName,
-      title: currentData.title,
-      scheduledDate: currentData.date,
-      scheduledTime: currentData.startTime,
-      location: currentData.location,
+      title: currentData.title || request.title || '',
+      description: currentData.description || request.description || '',
+      category: currentData.categoryId || request.categoryId || 'General',
+      priority: currentData.priority || request.priority || 'NORMAL',
+      scheduledDate: currentData.date || request.date || '',
+      scheduledTime: currentData.startTime || request.startTime || '',
+      location: currentData.location || request.location || '',
       status: 'IN_PROGRESS',
       completionCode: generatedCode,
       createdAt: new Date().toISOString()

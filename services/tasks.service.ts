@@ -77,6 +77,9 @@ export const directAcceptTask = async (
       helperId: helper.uid,
       helperName: helper.fullName,
       title: currentData.title,
+      description: currentData.description || '',
+      category: currentData.categoryId || 'General',
+      priority: currentData.priority || 'NORMAL',
       scheduledDate: currentData.date,
       scheduledTime: currentData.startTime,
       location: currentData.location,
@@ -100,6 +103,85 @@ export const directAcceptTask = async (
     return generatedCode;
   });
 };
+
+export const directDispatchByAdmin = async (
+  request: HelpRequest,
+  employee: { uid: string; fullName: string; department?: string }
+): Promise<string> => {
+  if (!request.id) throw new Error('Request ID is required');
+
+  const { runTransaction } = await import('firebase/firestore');
+
+  return await runTransaction(db, async (transaction) => {
+    const requestRef = doc(db, 'helpRequests', request.id!);
+    const requestSnap = await transaction.get(requestRef);
+
+    if (!requestSnap.exists()) {
+      throw new Error('This request no longer exists.');
+    }
+
+    const currentData = requestSnap.data() as HelpRequest;
+    const generatedCode = Math.floor(1000 + Math.random() * 9000).toString();
+
+    // 1. Update helpRequests
+    transaction.update(requestRef, {
+      status: 'IN_PROGRESS',
+      selectedHelperId: employee.uid,
+      selectedHelperName: employee.fullName,
+      completionCode: generatedCode,
+      dispatchedByAdmin: true,
+      isEscalated: false,
+      updatedAt: new Date().toISOString()
+    });
+
+    // 2. Create helpTasks
+    const taskRef = doc(collection(db, 'helpTasks'));
+    transaction.set(taskRef, {
+      requestId: request.id,
+      requesterId: currentData.requesterId,
+      requesterName: currentData.requesterName,
+      helperId: employee.uid,
+      helperName: employee.fullName,
+      title: currentData.title,
+      description: currentData.description || '',
+      category: currentData.categoryId || 'General',
+      priority: currentData.priority || 'URGENT',
+      scheduledDate: currentData.date,
+      scheduledTime: currentData.startTime,
+      location: currentData.location,
+      status: 'IN_PROGRESS',
+      completionCode: generatedCode,
+      createdAt: new Date().toISOString()
+    });
+
+    // 3. Notify requester
+    const notifRef = doc(collection(db, 'notifications'));
+    transaction.set(notifRef, {
+      userId: currentData.requesterId,
+      title: '🚨 Admin Dispatched a Specialist!',
+      message: `Platform Admin assigned ${employee.fullName} (${employee.department || 'Specialist'}) to your urgent request "${currentData.title}". Handshake code: ${generatedCode}`,
+      read: false,
+      type: 'DISPATCH_ASSIGNED',
+      relatedId: request.id,
+      createdAt: new Date().toISOString()
+    });
+
+    // 4. Notify employee
+    const empNotifRef = doc(collection(db, 'notifications'));
+    transaction.set(empNotifRef, {
+      userId: employee.uid,
+      title: '🚨 Urgent Admin Dispatch Assignment!',
+      message: `You have been directly assigned to urgent task "${currentData.title}" at ${currentData.location}. Please open Task Chat.`,
+      read: false,
+      type: 'DISPATCH_ASSIGNED',
+      relatedId: request.id,
+      createdAt: new Date().toISOString()
+    });
+
+    return generatedCode;
+  });
+};
+
 
 export const verifyHandshakeCode = async (
   requestId: string,

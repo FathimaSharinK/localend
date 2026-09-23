@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -19,55 +20,121 @@ import {
   Navigation,
   LocateFixed,
   SlidersHorizontal,
-  Compass
+  Compass,
+  AlertTriangle,
+  Zap,
+  Clock
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { 
   getRequestDistance, 
   formatDistance, 
   DISTANCE_FILTERS, 
-  Coordinates 
+  Coordinates,
+  DEFAULT_HUB_COORDINATES,
+  resolveCoordinates,
+  getGoogleMapsUrl 
 } from '@/lib/distance';
 import HelpDetailModal from '@/components/requests/HelpDetailModal';
 import CreateRequestModal from '@/components/requests/CreateRequestModal';
 import AppLayout from '@/components/layout/AppLayout';
 
-const CATEGORIES = [
-  'All',
-  'Moving',
-  'Delivery',
-  'Shopping',
-  'Transportation',
-  'Household',
-  'Technical Help',
-  'Education',
-  'Errands',
-  'Community Support',
-  'Other'
-];
+import { DISCOVER_CATEGORIES } from '@/data/categories';
+import { evaluateAndEscalateRequest, getMinutesUntilDeadline } from '@/lib/slaEscalation';
+import { directAcceptTask } from '@/services/tasks.service';
+import TaskChatModal from '@/components/chat/TaskChatModal';
+import { sortByLatestScheduled } from '@/lib/sortUtils';
+
+const CATEGORIES = DISCOVER_CATEGORIES;
 
 export default function DiscoverPage() {
   const { user, profile } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (profile?.role === 'user') {
+      router.replace('/tasks');
+    }
+  }, [profile?.role, router]);
+
   const [requests, setRequests] = useState<HelpRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedRadius, setSelectedRadius] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'nearest' | 'newest'>('nearest');
   
-  // Real-time GPS/User coordinates
+  // Real-time GPS/User coordinates (Always Active)
   const [liveCoords, setLiveCoords] = useState<Coordinates | null>(null);
   const [detectingGps, setDetectingGps] = useState(false);
 
   const [selectedRequest, setSelectedRequest] = useState<HelpRequest | null>(null);
   const [editingRequest, setEditingRequest] = useState<HelpRequest | null>(null);
+  const [chatTask, setChatTask] = useState<{ id: string; title: string; partnerName: string; partnerRole: string } | null>(null);
 
-  // Effective coordinates: live detected GPS, or profile coordinates
-  const effectiveCoords: Coordinates | null = useMemo(() => {
-    if (liveCoords) return liveCoords;
-    if (profile?.coordinates) return profile.coordinates;
-    return null;
-  }, [liveCoords, profile?.coordinates]);
+  // Always-Active Continuous Live GPS Watcher
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // Load instantly from localStorage cache so distances render with 0ms delay
+    try {
+      const cached = localStorage.getItem('localend_live_coords');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && typeof parsed.lat === 'number' && !isNaN(parsed.lat)) {
+          setLiveCoords(parsed);
+        }
+      }
+    } catch (e) {}
+
+    if (!navigator.geolocation) return;
+
+    // Immediate high-accuracy position fetch
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setLiveCoords(coords);
+        try { localStorage.setItem('localend_live_coords', JSON.stringify(coords)); } catch (e) {}
+      },
+      () => {},
+      { enableHighAccuracy: true, timeout: 6000, maximumAge: 10000 }
+    );
+
+    // Continuous watchPosition to keep GPS always active and current
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setLiveCoords(coords);
+        try { localStorage.setItem('localend_live_coords', JSON.stringify(coords)); } catch (e) {}
+      },
+      (err) => console.log('Continuous GPS notice:', err.message),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
+    );
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, []);
+
+  // Effective coordinates: live detected GPS, or profile coordinates, or area lookup, or Perinthalmanna default
+  const effectiveCoords: Coordinates = useMemo(() => {
+    if (liveCoords && typeof liveCoords.lat === 'number' && !isNaN(liveCoords.lat)) {
+      return liveCoords;
+    }
+    if (profile?.coordinates && typeof profile.coordinates.lat === 'number' && !isNaN(profile.coordinates.lat)) {
+      return profile.coordinates;
+    }
+    const resolved = resolveCoordinates(null, profile?.area);
+    if (resolved) return resolved;
+    return DEFAULT_HUB_COORDINATES;
+  }, [liveCoords, profile?.coordinates, profile?.area]);
+
+  // Clean reference location name (sanitizes email strings)
+  const referenceLocationName = useMemo(() => {
+    if (liveCoords) return `Live GPS (${liveCoords.lat.toFixed(3)}, ${liveCoords.lng.toFixed(3)})`;
+    if (profile?.area && !profile.area.includes('@')) return profile.area;
+    return 'Perinthalmanna Hub';
+  }, [liveCoords, profile?.area]);
 
   const handleDetectGps = () => {
     if (typeof window === 'undefined' || !navigator.geolocation) {
@@ -77,10 +144,9 @@ export default function DiscoverPage() {
     setDetectingGps(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setLiveCoords({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude
-        });
+        const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setLiveCoords(coords);
+        try { localStorage.setItem('localend_live_coords', JSON.stringify(coords)); } catch (e) {}
         setDetectingGps(false);
       },
       (err) => {
@@ -88,18 +154,37 @@ export default function DiscoverPage() {
         setDetectingGps(false);
         alert("Unable to detect current GPS location. You can configure your area in Settings.");
       },
-      { timeout: 8000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
 
   useEffect(() => {
-    const q = query(
-      collection(db, 'helpRequests'),
-      where('status', '==', 'OPEN')
-    );
+    if (!user) return;
+
+    let q;
+    // User sees only their own requests; Employee sees OPEN requests; Admin sees all
+    if (profile?.role === 'user') {
+      q = query(
+        collection(db, 'helpRequests'),
+        where('requesterId', '==', user.uid)
+      );
+    } else {
+      q = query(
+        collection(db, 'helpRequests'),
+        where('status', '==', 'OPEN')
+      );
+    }
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       let items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as HelpRequest));
+      
+      // Auto-evaluate SLA deadlines for open requests
+      items.forEach(req => {
+        if (req.status === 'OPEN') {
+          evaluateAndEscalateRequest(req);
+        }
+      });
+
       setRequests(items);
       setLoading(false);
     }, (err) => {
@@ -108,7 +193,7 @@ export default function DiscoverPage() {
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, profile?.role]);
 
   // Enrich requests with distances and apply radius + category + text filters
   const filteredRequests = useMemo(() => {
@@ -139,7 +224,7 @@ export default function DiscoverPage() {
 
     // 3. Category Filter
     if (selectedCategory !== 'All') {
-      list = list.filter((r) => r.categoryId === selectedCategory);
+      list = list.filter((r) => r.categoryId?.toLowerCase() === selectedCategory.toLowerCase());
     }
 
     // 4. Radius / Distance Filter
@@ -157,11 +242,44 @@ export default function DiscoverPage() {
         return a.distanceKm - b.distanceKm;
       });
     } else {
-      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      list = sortByLatestScheduled(list);
     }
 
     return list;
-  }, [requests, searchQuery, selectedCategory, selectedRadius, sortBy, effectiveCoords, profile?.area]);
+  }, [requests, searchQuery, selectedCategory, selectedRadius, sortBy, effectiveCoords, profile?.area, profile?.role, profile?.department]);
+
+  const [claimingEmergencyId, setClaimingEmergencyId] = useState<string | null>(null);
+
+  // Urgent Department Requests for Employee (SLA approaching deadline <= 120m, overdue, or marked URGENT)
+  const urgentDeptRequests = useMemo(() => {
+    if (profile?.role !== 'employee' || !profile?.department) return [];
+    return requests.filter(req => {
+      if (req.status !== 'OPEN') return false;
+      const deptMatch = req.categoryId?.trim().toLowerCase() === profile.department?.trim().toLowerCase();
+      if (!deptMatch) return false;
+      if (req.isEscalated || req.priority === 'URGENT') return true;
+      const mins = getMinutesUntilDeadline(req.date, req.startTime);
+      return mins !== null && mins <= 120;
+    });
+  }, [requests, profile?.role, profile?.department]);
+
+  const handleClaimEmergency = async (req: HelpRequest) => {
+    if (!user || !profile || !req.id) return;
+    setClaimingEmergencyId(req.id);
+    try {
+      await directAcceptTask(req, {
+        uid: user.uid,
+        fullName: profile.fullName || 'Department Specialist'
+      });
+      alert(`Emergency mission "${req.title}" claimed successfully! Handshake code generated.`);
+      router.push('/tasks');
+    } catch (err: any) {
+      console.error('Error claiming emergency mission:', err);
+      alert(err.message || 'Failed to claim mission.');
+    } finally {
+      setClaimingEmergencyId(null);
+    }
+  };
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -174,6 +292,14 @@ export default function DiscoverPage() {
     }
   };
 
+  const getCategoryLabel = (cat: string) => {
+    if (cat === 'Medical') return '🩺 Medical';
+    if (cat === 'Groceries') return '🛒 Groceries';
+    if (cat === 'Electrical') return '⚡ Electrical';
+    if (cat === 'Plumbing') return '🔧 Plumbing';
+    return cat;
+  };
+
   return (
     <AppLayout>
       <div className="space-y-6 sm:space-y-7 animate-in fade-in duration-300 pb-16 text-slate-900">
@@ -181,17 +307,37 @@ export default function DiscoverPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5 border-b border-slate-200/80 pb-5">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1 uppercase tracking-wider">
-                <Sparkles className="w-3 h-3" />
-                Hyperlocal Community Help
-              </span>
-              <span className="text-[11px] text-slate-400 font-mono">Live Proximity Feed</span>
+              {profile?.role === 'employee' ? (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1 uppercase tracking-wider">
+                  <Sparkles className="w-3 h-3" />
+                  {profile.department || 'Staff'} Department Job Board
+                </span>
+              ) : profile?.role === 'user' ? (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1 uppercase tracking-wider">
+                  <Sparkles className="w-3 h-3" />
+                  Your Citizen Request Explorer
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1 uppercase tracking-wider">
+                  <Sparkles className="w-3 h-3" />
+                  All Category Master Explorer
+                </span>
+              )}
+              <span className="text-[11px] text-slate-400 font-mono">Live Sync</span>
             </div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-              Discover Opportunities to Help
+              {profile?.role === 'employee' 
+                ? `${profile.department || 'Department'} Tasks Awaiting Specialist`
+                : profile?.role === 'user'
+                ? 'Your Service & Help Requests'
+                : 'Browse Neighborhood Requests'}
             </h1>
             <p className="text-slate-500 text-xs mt-0.5">
-              Browse requests posted by neighbors in your area. Filter by distance and offer assistance nearby.
+              {profile?.role === 'employee'
+                ? `You are viewing open ${profile.department || 'specialized'} requests posted by local citizens. Claim jobs to earn trust points.`
+                : profile?.role === 'user'
+                ? 'Track your posted requests, technician status, and 4-digit verification tokens.'
+                : 'Master view of all 4 service categories: Medical, Groceries, Electrical, and Plumbing.'}
             </p>
           </div>
 
@@ -199,7 +345,7 @@ export default function DiscoverPage() {
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <Input
               type="text"
-              placeholder="Search keyword, location, skill..."
+              placeholder="Search keyword, location..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9 h-9 rounded-xl bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 text-xs focus:border-blue-600 shadow-2xs"
@@ -209,20 +355,46 @@ export default function DiscoverPage() {
 
         {/* Filter Controls Stack */}
         <div className="space-y-3">
-          {/* Row 1: Category Filter Chips */}
+          {/* Row 1: Category Filter Chips - Accessible for all community members & employees */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-            {CATEGORIES.map((cat) => (
+            <button
+              onClick={() => setSelectedCategory('All')}
+              className={cn(
+                "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1",
+                selectedCategory === 'All'
+                  ? "bg-blue-600 text-white shadow-2xs"
+                  : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+              )}
+            >
+              <span>🌟 All Community Help</span>
+            </button>
+
+            {profile?.role === 'employee' && profile?.department && (
+              <button
+                onClick={() => setSelectedCategory(profile.department!)}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1 border",
+                  selectedCategory.toLowerCase() === profile.department.toLowerCase()
+                    ? "bg-indigo-600 text-white border-indigo-600 shadow-2xs"
+                    : "bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100"
+                )}
+              >
+                <span>🎯 My {profile.department} Jobs</span>
+              </button>
+            )}
+
+            {CATEGORIES.filter(c => c !== 'All').map((cat) => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
                 className={cn(
-                  "px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer",
-                  selectedCategory === cat
+                  "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1",
+                  selectedCategory.toLowerCase() === cat.toLowerCase()
                     ? "bg-blue-600 text-white shadow-2xs"
                     : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                 )}
               >
-                {cat}
+                <span>{getCategoryLabel(cat)}</span>
               </button>
             ))}
           </div>
@@ -253,21 +425,22 @@ export default function DiscoverPage() {
 
             {/* Right: Location Reference & Sort Toggle */}
             <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-auto">
-              {/* Reference location badge */}
-              <div className="flex items-center gap-1.5 text-[11px] text-slate-500 bg-white px-2.5 py-1 rounded-lg border border-slate-200">
-                <MapPin className="w-3 h-3 text-emerald-600 shrink-0" />
-                <span className="truncate max-w-[130px] font-medium text-slate-700">
-                  {profile?.area || (liveCoords ? 'Live GPS' : 'Location Not Set')}
+              {/* Reference location badge - Always Active GPS */}
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-700 bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs">
+                {liveCoords ? (
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                ) : (
+                  <MapPin className="w-3 h-3 text-emerald-600 shrink-0" />
+                )}
+                <span className="truncate max-w-[130px] font-bold text-slate-800" title={referenceLocationName}>
+                  {liveCoords ? 'Live GPS Active' : referenceLocationName}
                 </span>
-                <button
-                  type="button"
-                  onClick={handleDetectGps}
-                  disabled={detectingGps}
-                  className="ml-1 text-[10px] text-blue-600 hover:text-blue-800 font-bold underline cursor-pointer"
-                  title="Detect live GPS location"
-                >
-                  {detectingGps ? 'Detecting...' : liveCoords ? 'GPS Active' : 'Detect'}
-                </button>
+                <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  Always Active
+                </span>
               </div>
 
               {/* Sort Switcher */}
@@ -299,6 +472,25 @@ export default function DiscoverPage() {
               </div>
             </div>
           </div>
+
+          {/* Active Radius Filter Info Banner */}
+          {selectedRadius !== 'all' && (
+            <div className="flex items-center justify-between px-3 py-1.5 bg-blue-50/90 border border-blue-200 rounded-xl text-xs text-blue-800 animate-in fade-in">
+              <div className="flex items-center gap-1.5">
+                <Navigation className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                <span>
+                  Showing tasks within <strong>{selectedRadius} km</strong> of <strong>{referenceLocationName}</strong> ({filteredRequests.length} match{filteredRequests.length === 1 ? '' : 'es'})
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedRadius('all')}
+                className="text-[11px] font-bold text-blue-700 hover:text-blue-900 underline cursor-pointer shrink-0"
+              >
+                Clear radius filter
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Requests Grid */}
@@ -313,12 +505,16 @@ export default function DiscoverPage() {
             <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mx-auto mb-2.5">
               <HandHeart className="w-5 h-5" />
             </div>
-            <h3 className="text-sm font-bold text-slate-900">No requests found in this radius</h3>
+            <h3 className="text-sm font-bold text-slate-900">
+              {profile?.role === 'employee' 
+                ? `No open ${profile?.department || ''} requests right now`
+                : 'No requests found in this radius'}
+            </h3>
             <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-              {selectedRadius !== 'all'
+              {profile?.role === 'employee'
+                ? `There are currently no open service requests in the ${profile?.department || ''} department. You will be alerted as soon as a citizen requests assistance.`
+                : selectedRadius !== 'all'
                 ? `There are no requests within ${selectedRadius} km of ${profile?.area || 'your location'}. Try choosing a wider radius or "All Distances".`
-                : searchQuery || selectedCategory !== 'All' 
-                ? 'Try adjusting your search or category filter to discover more requests.' 
                 : 'There are no open help requests right now. Check back soon!'}
             </p>
             {selectedRadius !== 'all' && (
@@ -335,12 +531,19 @@ export default function DiscoverPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredRequests.map((request) => {
               const isOwner = user && request.requesterId === user.uid;
+              const minsLeft = getMinutesUntilDeadline(request.date, request.startTime);
+              const isUrgentSla = request.isEscalated || (request.status === 'OPEN' && (request.priority === 'URGENT' || (minsLeft !== null && minsLeft <= 120)));
 
               return (
                 <div
                   key={request.id}
                   onClick={() => setSelectedRequest(request)}
-                  className="bg-white border border-slate-200/85 hover:border-blue-300 rounded-2xl p-4 shadow-xs hover:shadow-sm transition-all cursor-pointer flex flex-col justify-between group"
+                  className={cn(
+                    "rounded-2xl p-4 transition-all cursor-pointer flex flex-col justify-between group",
+                    isUrgentSla
+                      ? "bg-rose-50/85 border-2 border-rose-300 hover:border-rose-400 shadow-sm hover:shadow-md ring-1 ring-rose-200/70"
+                      : "bg-white border border-slate-200/85 hover:border-blue-300 shadow-xs hover:shadow-sm"
+                  )}
                 >
                   <div>
                     {/* Card Top: Badges & Proximity */}
@@ -349,6 +552,20 @@ export default function DiscoverPage() {
                         <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-md border", getPriorityColor(request.priority))}>
                           {request.priority}
                         </span>
+                        {/* Category Badge */}
+                        <span className={cn(
+                          "text-[10px] font-semibold px-2 py-0.5 rounded-md border",
+                          isUrgentSla ? "bg-white/80 text-rose-800 border-rose-200" : "bg-slate-100 text-slate-700 border-slate-200"
+                        )}>
+                          {getCategoryLabel(request.categoryId)}
+                        </span>
+                        {/* SLA Alert Badge */}
+                        {isUrgentSla && (
+                          <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-rose-600 text-white border border-rose-700 animate-pulse flex items-center gap-1 shadow-2xs font-mono">
+                            <AlertTriangle className="w-2.5 h-2.5" />
+                            <span>Urgent SLA{minsLeft !== null ? (minsLeft <= 0 ? ' (OVERDUE)' : ` (${minsLeft}m left)`) : ''}</span>
+                          </span>
+                        )}
                         {isOwner && (
                           <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200">
                             Your Request
@@ -356,33 +573,58 @@ export default function DiscoverPage() {
                         )}
                         {/* Distance Badge */}
                         {request.distanceFormatted && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50/90 px-2 py-0.5 rounded-md border border-blue-200">
-                            <Navigation className="w-2.5 h-2.5 text-blue-600 shrink-0" />
+                          <span className={cn(
+                            "inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md border",
+                            isUrgentSla ? "text-rose-700 bg-white/80 border-rose-200" : "text-blue-700 bg-blue-50/90 border-blue-200"
+                          )}>
+                            <Navigation className={cn("w-2.5 h-2.5 shrink-0", isUrgentSla ? "text-rose-600" : "text-blue-600")} />
                             <span>{request.distanceFormatted}</span>
                           </span>
                         )}
                       </div>
-                      <span className="text-[11px] font-medium text-slate-400 shrink-0">
+                      <span className={cn(
+                        "text-[11px] font-medium shrink-0",
+                        isUrgentSla ? "text-rose-600/80" : "text-slate-400"
+                      )}>
                         {isOwner ? 'Posted by You' : `by ${request.requesterName}`}
                       </span>
                     </div>
 
-                    <h3 className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-1 mb-1">
+                    <h3 className={cn(
+                      "text-sm font-semibold transition-colors line-clamp-1 mb-1",
+                      isUrgentSla ? "text-slate-900 font-bold group-hover:text-rose-700" : "text-slate-900 group-hover:text-blue-600"
+                    )}>
                       {request.title}
                     </h3>
-                    <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed mb-3">
+                    <p className={cn(
+                      "text-xs line-clamp-2 leading-relaxed mb-3",
+                      isUrgentSla ? "text-slate-700" : "text-slate-500"
+                    )}>
                       {request.description}
                     </p>
                   </div>
 
-                  <div className="space-y-2.5 pt-2.5 border-t border-slate-100">
-                    <div className="flex items-center justify-between text-[11px] text-slate-500">
-                      <span className="inline-flex items-center gap-1.5 truncate max-w-[150px]">
-                        <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                        <span className="truncate">{request.location}</span>
-                      </span>
+                  <div className={cn("space-y-2.5 pt-2.5 border-t", isUrgentSla ? "border-rose-200/80" : "border-slate-100")}>
+                    <div className={cn(
+                      "flex items-center justify-between text-[11px]",
+                      isUrgentSla ? "text-rose-700/80" : "text-slate-500"
+                    )}>
+                      <a
+                        href={getGoogleMapsUrl(request.location, request.coordinates)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1.5 truncate max-w-[170px] hover:underline cursor-pointer group"
+                        title="Open location in Google Maps"
+                      >
+                        <MapPin className={cn("w-3 h-3 shrink-0", isUrgentSla ? "text-rose-500" : "text-slate-400 group-hover:text-blue-600")} />
+                        <span className="truncate group-hover:underline">{request.location}</span>
+                      </a>
                       {request.date && (
-                        <span className="inline-flex items-center gap-1 font-mono text-[10px] text-slate-400">
+                        <span className={cn(
+                          "inline-flex items-center gap-1 font-mono text-[10px]",
+                          isUrgentSla ? "text-rose-600" : "text-slate-400"
+                        )}>
                           <Calendar className="w-3 h-3" />
                           {request.date}
                         </span>
@@ -414,15 +656,37 @@ export default function DiscoverPage() {
                           <Pencil className="w-3.5 h-3.5" />
                         </Button>
                       </div>
+                    ) : profile?.role === 'employee' ? (
+                      <Button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedRequest(request);
+                        }}
+                        className={cn(
+                          "w-full h-8.5 rounded-lg font-medium text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer",
+                          isUrgentSla
+                            ? "bg-rose-600 text-white hover:bg-rose-700 font-bold shadow-xs ring-1 ring-rose-500/50"
+                            : "bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white border border-indigo-200/60"
+                        )}
+                      >
+                        {isUrgentSla ? <Zap className="w-3.5 h-3.5" /> : null}
+                        <span>{isUrgentSla ? 'Claim Urgent Task' : 'Claim / Offer Service'}</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </Button>
                     ) : (
                       <Button
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedRequest(request);
                         }}
-                        className="w-full h-8.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white border border-blue-200/60 font-medium text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                        className={cn(
+                          "w-full h-8.5 rounded-lg font-medium text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer",
+                          isUrgentSla 
+                            ? "bg-rose-100 text-rose-800 hover:bg-rose-200 border border-rose-300 font-semibold" 
+                            : "bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200"
+                        )}
                       >
-                        <span>Offer Assistance</span>
+                        <span>View Details</span>
                         <ArrowRight className="w-3 h-3" />
                       </Button>
                     )}
@@ -444,6 +708,17 @@ export default function DiscoverPage() {
           <CreateRequestModal
             editRequest={editingRequest}
             onClose={() => setEditingRequest(null)}
+          />
+        )}
+
+        {/* Real-time Task Chat with Voice Notes Modal */}
+        {chatTask && (
+          <TaskChatModal
+            requestId={chatTask.id}
+            taskTitle={chatTask.title}
+            otherPartyName={chatTask.partnerName}
+            otherPartyRole={chatTask.partnerRole}
+            onClose={() => setChatTask(null)}
           />
         )}
       </div>

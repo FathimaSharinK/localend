@@ -20,7 +20,8 @@ import {
   Settings as SettingsIcon, 
   ShieldCheck,
   LayoutDashboard,
-  Users
+  Users,
+  Layers
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
@@ -79,23 +80,29 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
     router.push('/login');
   };
 
-  const regularNavItems = [
+  const regularNavItems = profile?.role === 'employee' ? [
     { icon: Home, label: 'Dashboard', to: '/dashboard' },
-    { icon: HandHeart, label: 'Discover Help', to: '/discover' },
-    { icon: ClipboardList, label: 'My Tasks', to: '/tasks' },
+    { icon: HandHeart, label: `${profile.department || 'Dept'} Jobs`, to: '/discover' },
+    { icon: ClipboardList, label: 'My Missions', to: '/tasks' },
+    { icon: SettingsIcon, label: 'Settings', to: '/settings' },
+  ] : [
+    { icon: Home, label: 'Dashboard', to: '/dashboard' },
+    { icon: ClipboardList, label: 'My Requests', to: '/tasks' },
     { icon: SettingsIcon, label: 'Settings', to: '/settings' },
   ];
 
   const getPageTitle = () => {
     const search = searchParams.toString();
     if (isAdminRoute || isAdmin) {
+      if (search.includes('employees')) return 'Employee Management';
       if (search.includes('users')) return 'User Modules';
+      if (search.includes('tasks')) return 'Master Task Explorer';
       if (search.includes('settings')) return 'Admin Settings';
       return 'Admin Overview';
     }
     if (pathname.startsWith('/dashboard')) return 'Dashboard';
-    if (pathname.startsWith('/discover')) return 'Discover Requests';
-    if (pathname.startsWith('/tasks')) return 'My Tasks';
+    if (pathname.startsWith('/discover')) return profile?.role === 'employee' ? `${profile?.department || 'Department'} Job Feed` : 'Requests';
+    if (pathname.startsWith('/tasks')) return profile?.role === 'employee' ? 'My Missions' : 'My Requests';
     if (pathname.startsWith('/settings')) return 'Settings';
     return 'Community';
   };
@@ -133,6 +140,20 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
             </Link>
 
             <Link
+              href="/admin?tab=employees"
+              onClick={() => setMobileMenuOpen(false)}
+              className={cn(
+                "flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors font-medium text-xs",
+                currentTab === 'employees'
+                  ? "bg-blue-50 text-blue-700 font-semibold"
+                  : "text-slate-600 hover:bg-slate-100/70 hover:text-slate-900"
+              )}
+            >
+              <Users className="h-4 w-4 shrink-0" />
+              <span>Employee Module</span>
+            </Link>
+
+            <Link
               href="/admin?tab=users"
               onClick={() => setMobileMenuOpen(false)}
               className={cn(
@@ -143,7 +164,35 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
               )}
             >
               <Users className="h-4 w-4 shrink-0" />
-              <span>User Modules</span>
+              <span>User Module</span>
+            </Link>
+
+            <Link
+              href="/admin?tab=departments"
+              onClick={() => setMobileMenuOpen(false)}
+              className={cn(
+                "flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors font-medium text-xs",
+                currentTab === 'departments'
+                  ? "bg-blue-50 text-blue-700 font-semibold"
+                  : "text-slate-600 hover:bg-slate-100/70 hover:text-slate-900"
+              )}
+            >
+              <Layers className="h-4 w-4 shrink-0" />
+              <span>Departments</span>
+            </Link>
+
+            <Link
+              href="/admin?tab=tasks"
+              onClick={() => setMobileMenuOpen(false)}
+              className={cn(
+                "flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors font-medium text-xs",
+                currentTab === 'tasks'
+                  ? "bg-blue-50 text-blue-700 font-semibold"
+                  : "text-slate-600 hover:bg-slate-100/70 hover:text-slate-900"
+              )}
+            >
+              <ClipboardList className="h-4 w-4 shrink-0" />
+              <span>All Tasks</span>
             </Link>
 
             <Link
@@ -175,7 +224,7 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
       );
     }
 
-    // Regular App Sidebar
+    // Regular App Sidebar (Employee or User)
     return (
       <div className="flex flex-col h-full bg-white text-slate-700 border-r border-slate-200/80 select-none">
         {/* Brand Header */}
@@ -183,8 +232,17 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
           <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs">
             <HandHeart className="h-4 w-4" />
           </div>
-          <div className="ml-2.5">
+          <div className="ml-2.5 flex items-center gap-1.5">
             <span className="text-sm font-bold tracking-tight text-slate-900 font-display">Localend</span>
+            {profile?.role === 'employee' ? (
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200/60 uppercase">
+                {profile.department || 'Staff'}
+              </span>
+            ) : (
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/60 uppercase">
+                Citizen
+              </span>
+            )}
           </div>
         </div>
 
@@ -219,7 +277,9 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
             </div>
             <div className="min-w-0 flex-1 leading-tight">
               <p className="text-xs font-semibold text-slate-800 truncate">{profile?.fullName || 'Neighbor'}</p>
-              <p className="text-[10px] text-slate-400 truncate">{profile?.area || 'Verified'}</p>
+              <p className="text-[10px] text-slate-400 truncate">
+                {profile?.role === 'employee' ? `${profile.department || 'Specialist'} Department` : profile?.area || 'Verified Citizen'}
+              </p>
             </div>
           </div>
           
@@ -277,7 +337,7 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
 
           {/* Right section: Actions + Profile */}
           <div className="flex items-center gap-2">
-            {!isAdmin && (
+            {profile?.role === 'user' && (
               <Button
                 onClick={() => openCreateRequest()}
                 size="sm"
@@ -398,6 +458,52 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
                 <span className="text-[10px]">Settings</span>
               </Link>
             </>
+          ) : profile?.role === 'employee' ? (
+            <>
+              <Link
+                href="/dashboard"
+                className={cn(
+                  "flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg transition-colors",
+                  pathname === '/dashboard' ? "text-blue-600 font-semibold" : "text-slate-500 hover:text-slate-900"
+                )}
+              >
+                <Home className="w-4 h-4" />
+                <span className="text-[10px]">Home</span>
+              </Link>
+
+              <Link
+                href="/discover"
+                className={cn(
+                  "flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg transition-colors",
+                  pathname.startsWith('/discover') ? "text-blue-600 font-semibold" : "text-slate-500 hover:text-slate-900"
+                )}
+              >
+                <HandHeart className="w-4 h-4" />
+                <span className="text-[10px]">{profile?.department || 'Dept'} Jobs</span>
+              </Link>
+
+              <Link
+                href="/tasks"
+                className={cn(
+                  "flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg transition-colors",
+                  pathname.startsWith('/tasks') ? "text-blue-600 font-semibold" : "text-slate-500 hover:text-slate-900"
+                )}
+              >
+                <ClipboardList className="w-4 h-4" />
+                <span className="text-[10px]">Missions</span>
+              </Link>
+
+              <Link
+                href="/settings"
+                className={cn(
+                  "flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg transition-colors",
+                  pathname.startsWith('/settings') ? "text-blue-600 font-semibold" : "text-slate-500 hover:text-slate-900"
+                )}
+              >
+                <SettingsIcon className="w-4 h-4" />
+                <span className="text-[10px]">Settings</span>
+              </Link>
+            </>
           ) : (
             <>
               <Link
@@ -413,20 +519,7 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
                 <span className="text-[10px]">Home</span>
               </Link>
 
-              <Link
-                href="/discover"
-                className={cn(
-                  "flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg transition-colors",
-                  pathname.startsWith('/discover') 
-                    ? "text-blue-600 font-semibold" 
-                    : "text-slate-500 hover:text-slate-900"
-                )}
-              >
-                <HandHeart className="w-4 h-4" />
-                <span className="text-[10px]">Discover</span>
-              </Link>
-
-              {/* Compact Center Action Button */}
+              {/* Compact Center Action Button for Citizen only */}
               <button
                 onClick={() => openCreateRequest()}
                 className="w-9 h-9 -mt-3.5 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-md shadow-blue-600/30 border-2 border-white hover:bg-blue-700 active:scale-95 transition-all"
@@ -445,7 +538,7 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
                 )}
               >
                 <ClipboardList className="w-4 h-4" />
-                <span className="text-[10px]">Tasks</span>
+                <span className="text-[10px]">Requests</span>
               </Link>
 
               <Link
