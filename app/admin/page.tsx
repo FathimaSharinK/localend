@@ -59,7 +59,7 @@ import { cn } from '@/lib/utils';
 import AppLayout from '@/components/layout/AppLayout';
 import { directDispatchByAdmin } from '@/services/tasks.service';
 import { deleteHelpRequest } from '@/services/requests.service';
-import { getMinutesUntilDeadline } from '@/lib/slaEscalation';
+import { getMinutesUntilDeadline, evaluateAndEscalateRequest } from '@/lib/slaEscalation';
 import { getGoogleMapsUrl, getRequestDistance, formatDistance } from '@/lib/distance';
 import { REQUEST_CATEGORIES } from '@/data/categories';
 import { sortByLatestScheduled } from '@/lib/sortUtils';
@@ -225,6 +225,30 @@ function AdminContent() {
   const [showAdminConfirmPass, setShowAdminConfirmPass] = useState(false);
   const [credSaving, setCredSaving] = useState(false);
 
+  // Manual SLA Check Trigger State
+  const [isCheckingSla, setIsCheckingSla] = useState(false);
+
+  const handleManualSlaCheck = async () => {
+    setIsCheckingSla(true);
+    try {
+      const res = await fetch('/api/cron/check-sla', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        if (data.escalatedCount > 0) {
+          showMessage(`🚨 Escalated ${data.escalatedCount} task(s)! Emergency alert email dispatched.`, 'success');
+        } else {
+          showMessage(`✅ Checked ${data.checkedCount} open tasks. All are within normal SLA limits.`, 'success');
+        }
+      } else {
+        showMessage(data.error || 'Failed to complete SLA check.', 'error');
+      }
+    } catch (err: any) {
+      showMessage('Network error during SLA evaluation.', 'error');
+    } finally {
+      setIsCheckingSla(false);
+    }
+  };
+
   useEffect(() => {
     if (profile) {
       setAdminFullName(profile.fullName || 'Platform Admin');
@@ -247,6 +271,12 @@ function AdminContent() {
     const unsubRequests = onSnapshot(collection(db, 'helpRequests'), (snap) => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as HelpRequest));
       setRequestsList(sortByLatestScheduled(data));
+      // Auto-escalate any open requests approaching deadline (<= 50 mins or URGENT)
+      data.forEach(req => {
+        if (req.status === 'OPEN' && !req.isEscalated) {
+          evaluateAndEscalateRequest(req, user.uid);
+        }
+      });
     }, (err) => console.warn('Requests snapshot error:', err));
 
     const unsubOffers = onSnapshot(collection(db, 'helpOffers'), (snap) => {
@@ -1029,28 +1059,33 @@ function AdminContent() {
         )}
 
         {/* Admin Header */}
-        <div className="border-b border-slate-200/80 pb-5">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1 uppercase tracking-wider">
-              <ShieldCheck className="w-3 h-3" />
-              Admin Command Console
-            </span>
-            <span className="text-[11px] text-slate-400 font-mono">3-Tier RBAC & Dispatch Engine</span>
+        <div className="border-b border-slate-200/80 pb-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1 uppercase tracking-wider">
+                <ShieldCheck className="w-3 h-3" />
+                Admin Command Console
+              </span>
+              <span className="text-[11px] text-slate-400 font-mono">3-Tier RBAC & Dispatch Engine</span>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+              {activeTab === 'employees' ? 'Employee & Technician Management' :
+               activeTab === 'users' ? 'Citizen User Directory' :
+               activeTab === 'tasks' ? 'Master Category Task Console' :
+               activeTab === 'settings' ? 'Admin Profile & Credentials' :
+               'Network Overview & SLA Dispatch'}
+            </h1>
+            <p className="text-slate-500 text-xs mt-0.5">
+              {activeTab === 'employees' ? 'Manage service staff, department assignments, and toggle active/inactive status.' :
+               activeTab === 'users' ? 'Inspect registered citizens, review account activity, and maintain community safety.' :
+               activeTab === 'tasks' ? 'Full visibility across Medical, Groceries, Electrical, and Plumbing requests.' :
+               activeTab === 'settings' ? 'Update administrator credentials and base coordinates.' :
+               'Monitor real-time requests, resolve unattended SLA deadlines, and dispatch available specialists.'}
+            </p>
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-            {activeTab === 'employees' ? 'Employee & Technician Management' :
-             activeTab === 'users' ? 'Citizen User Directory' :
-             activeTab === 'tasks' ? 'Master Category Task Console' :
-             activeTab === 'settings' ? 'Admin Profile & Credentials' :
-             'Network Overview & SLA Dispatch'}
-          </h1>
-          <p className="text-slate-500 text-xs mt-0.5">
-            {activeTab === 'employees' ? 'Manage service staff, department assignments, and toggle active/inactive status.' :
-             activeTab === 'users' ? 'Inspect registered citizens, review account activity, and maintain community safety.' :
-             activeTab === 'tasks' ? 'Full visibility across Medical, Groceries, Electrical, and Plumbing requests.' :
-             activeTab === 'settings' ? 'Update administrator credentials and base coordinates.' :
-             'Monitor real-time requests, resolve unattended SLA deadlines, and dispatch available specialists.'}
-          </p>
+
+          {/* Quick SLA Escalation Trigger Button */}
+          
         </div>
 
         {/* TAB 1: OVERVIEW & SLA ESCALATION */}

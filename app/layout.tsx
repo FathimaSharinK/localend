@@ -4,6 +4,7 @@ import { Plus_Jakarta_Sans, Outfit } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ModalProvider } from "@/contexts/ModalContext";
+import SlaHeartbeat from "@/components/sla/SlaHeartbeat";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -48,6 +49,7 @@ export default function RootLayout({
       <body className="antialiased min-h-screen bg-[#f8fafc] text-slate-900">
         <AuthProvider>
           <ModalProvider>
+            <SlaHeartbeat />
             {children}
           </ModalProvider>
         </AuthProvider>
