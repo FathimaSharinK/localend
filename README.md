@@ -99,9 +99,9 @@ NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
 NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=your_measurement_id
 
 # Automated Gmail SMTP SLA Alert Configuration
-SMTP_USER=sayedshahloobp@gmail.com
-SMTP_PASS=smrm rvee szuh ddqo
-SMTP_TO=sayedshahloobp@gmail.com
+SMTP_USER=fathimasharin18@gmail.com
+SMTP_PASS="gzen esbk pkdh frez"
+ADMIN_ALERT_EMAIL=fathimasharin18@gmail.com
 ```
 
 ---
