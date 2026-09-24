@@ -259,7 +259,7 @@ export default function DiscoverPage() {
       if (!deptMatch) return false;
       if (req.isEscalated || req.priority === 'URGENT') return true;
       const mins = getMinutesUntilDeadline(req.date, req.startTime);
-      return mins !== null && mins <= 120;
+      return mins !== null && mins <= 50;
     });
   }, [requests, profile?.role, profile?.department]);
 
@@ -532,7 +532,7 @@ export default function DiscoverPage() {
             {filteredRequests.map((request) => {
               const isOwner = user && request.requesterId === user.uid;
               const minsLeft = getMinutesUntilDeadline(request.date, request.startTime);
-              const isUrgentSla = request.isEscalated || (request.status === 'OPEN' && (request.priority === 'URGENT' || (minsLeft !== null && minsLeft <= 120)));
+              const isUrgentSla = request.isEscalated || (request.status === 'OPEN' && (request.priority === 'URGENT' || (minsLeft !== null && minsLeft <= 50)));
 
               return (
                 <div

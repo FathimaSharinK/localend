@@ -354,7 +354,7 @@ function AdminContent() {
       if (req.status !== 'OPEN') return false;
       if (req.isEscalated) return true;
       const mins = getMinutesUntilDeadline(req.date, req.startTime);
-      return mins !== null && mins <= 120;
+      return mins !== null && mins <= 50;
     });
   }, [requestsList]);
 

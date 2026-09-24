@@ -238,7 +238,7 @@ export default function DashboardPage() {
       if (!deptMatch) return false;
       if (req.isEscalated || req.priority === 'URGENT') return true;
       const mins = getMinutesUntilDeadline(req.date, req.startTime);
-      return mins !== null && mins <= 120;
+      return mins !== null && mins <= 50;
     });
   }, [deptOpenRequests, isEmployee, profile?.department]);
 
@@ -591,7 +591,7 @@ export default function DashboardPage() {
                 );
                 const distFormatted = formatDistance(dist);
                 const minutesLeft = getMinutesUntilDeadline(request.date, request.startTime);
-                const isUrgentSla = request.isEscalated || (request.status === 'OPEN' && (request.priority === 'URGENT' || (minutesLeft !== null && minutesLeft <= 120)));
+                const isUrgentSla = request.isEscalated || (request.status === 'OPEN' && (request.priority === 'URGENT' || (minutesLeft !== null && minutesLeft <= 50)));
 
                 return (
                   <div 

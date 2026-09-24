@@ -98,6 +98,18 @@ export function subscribeDepartments(callback: (departments: DepartmentItem[]) =
   // Check seeding in background
   seedDefaultDepartments();
 
+  // Proactively fetch via API so unauthenticated guests on /register see all custom departments
+  if (typeof window !== 'undefined') {
+    fetch('/api/departments')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && Array.isArray(data.departments) && data.departments.length > 0) {
+          callback(data.departments);
+        }
+      })
+      .catch(() => {});
+  }
+
   return onSnapshot(collection(db, 'departments'), (snapshot) => {
     if (snapshot.empty) {
       callback(DEFAULT_DEPARTMENTS);
@@ -113,8 +125,21 @@ export function subscribeDepartments(callback: (departments: DepartmentItem[]) =
     items.sort((a, b) => a.name.localeCompare(b.name));
     callback(items);
   }, (err) => {
-    console.warn('Error subscribing to departments:', err);
-    callback(DEFAULT_DEPARTMENTS);
+    console.warn('Error subscribing to departments, fetching from API:', err);
+    if (typeof window !== 'undefined') {
+      fetch('/api/departments')
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && Array.isArray(data.departments) && data.departments.length > 0) {
+            callback(data.departments);
+          } else {
+            callback(DEFAULT_DEPARTMENTS);
+          }
+        })
+        .catch(() => callback(DEFAULT_DEPARTMENTS));
+    } else {
+      callback(DEFAULT_DEPARTMENTS);
+    }
   });
 }
 
