@@ -112,7 +112,7 @@ export const directDispatchByAdmin = async (
 
   const { runTransaction } = await import('firebase/firestore');
 
-  return await runTransaction(db, async (transaction) => {
+  const finalCode = await runTransaction(db, async (transaction) => {
     const requestRef = doc(db, 'helpRequests', request.id!);
     const requestSnap = await transaction.get(requestRef);
 
@@ -180,6 +180,62 @@ export const directDispatchByAdmin = async (
 
     return generatedCode;
   });
+
+  // 5. Dispatch Rich Email Alert with full Citizen and Specialist information
+  try {
+    const { getDoc } = await import('firebase/firestore');
+    const requesterDoc = await getDoc(doc(db, 'users', request.requesterId));
+    const requesterData = requesterDoc.exists() ? requesterDoc.data() : null;
+    const employeeDoc = await getDoc(doc(db, 'users', employee.uid));
+    const employeeData = employeeDoc.exists() ? employeeDoc.data() : null;
+
+    const recipientEmails: string[] = [];
+    if (employeeData?.email) recipientEmails.push(employeeData.email);
+    if ((employee as any).email && !recipientEmails.includes((employee as any).email)) {
+      recipientEmails.push((employee as any).email);
+    }
+    if (requesterData?.email && !recipientEmails.includes(requesterData.email)) {
+      recipientEmails.push(requesterData.email);
+    }
+
+    fetch('/api/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        alertNature: 'DISPATCH_ASSIGNED',
+        alertTitle: `Direct Dispatch: ${employee.fullName} assigned to "${request.title}"`,
+        alertReason: `An administrator has directly dispatched technician ${employee.fullName} (${employee.department || 'Specialist'}) to resolve this urgent community request.`,
+        alertSeverity: 'HIGH',
+        taskId: request.id,
+        taskTitle: request.title,
+        taskDescription: request.description,
+        category: request.categoryId,
+        location: request.location,
+        coordinates: request.coordinates,
+        scheduledDate: request.date,
+        scheduledTime: request.startTime,
+        priority: request.priority,
+        status: 'IN_PROGRESS',
+        requesterId: request.requesterId,
+        requesterName: requesterData?.fullName || request.requesterName,
+        requesterEmail: requesterData?.email,
+        requesterPhone: requesterData?.phone,
+        requesterArea: requesterData?.area || request.location,
+        assignedHelperId: employee.uid,
+        assignedHelperName: employee.fullName,
+        assignedHelperDepartment: employee.department,
+        assignedHelperPhone: employeeData?.phone,
+        handshakeCode: finalCode,
+        recipientEmails
+      })
+    }).catch(err => {
+      console.warn('Dispatch email warning:', err);
+    });
+  } catch (err) {
+    console.warn('Failed to trigger dispatch email notification:', err);
+  }
+
+  return finalCode;
 };
 
 

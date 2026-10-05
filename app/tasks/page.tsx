@@ -334,6 +334,11 @@ export default function TasksPage() {
     e.preventDefault();
     if (!verifyingTask?.id) return;
 
+    if (!verifyCodeInput.trim()) {
+      setVerifyError('Please fill out 4-Digit Handshake Code.');
+      return;
+    }
+
     if (verifyCodeInput.trim() !== verifyingTask.completionCode) {
       setVerifyError('Incorrect 4-digit code. Please verify with the requester.');
       return;
@@ -1146,7 +1151,12 @@ export default function TasksPage() {
                   maxLength={4}
                   required
                   value={verifyCodeInput}
-                  onChange={(e) => setVerifyCodeInput(e.target.value.replace(/\D/g, ''))}
+                  onChange={(e) => {
+                    e.currentTarget.setCustomValidity('');
+                    setVerifyCodeInput(e.target.value.replace(/\D/g, ''));
+                  }}
+                  onInvalid={(e) => e.currentTarget.setCustomValidity('Please fill out 4-Digit Handshake Code.')}
+                  onInput={(e) => e.currentTarget.setCustomValidity('')}
                   placeholder="0000"
                   className="h-10 w-full text-center text-lg font-mono font-bold tracking-widest rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-600"
                 />

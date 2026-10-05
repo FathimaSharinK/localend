@@ -389,6 +389,11 @@ export default function HelpDetailModal({ request, onClose, onOfferSuccess }: He
     e.preventDefault();
     if (!request?.id || !user) return;
 
+    if (!verifyCodeInput.trim()) {
+      setCodeError('Please fill out 4-Digit Handshake Code.');
+      return;
+    }
+
     if (verifyCodeInput.trim() !== request.completionCode) {
       setCodeError('Invalid code! Enter the 4-digit code provided by the requester.');
       return;
@@ -772,7 +777,12 @@ export default function HelpDetailModal({ request, onClose, onOfferSuccess }: He
                   maxLength={4}
                   required
                   value={verifyCodeInput}
-                  onChange={(e) => setVerifyCodeInput(e.target.value.replace(/\D/g, ''))}
+                  onChange={(e) => {
+                    e.currentTarget.setCustomValidity('');
+                    setVerifyCodeInput(e.target.value.replace(/\D/g, ''));
+                  }}
+                  onInvalid={(e) => e.currentTarget.setCustomValidity('Please fill out 4-Digit Handshake Code.')}
+                  onInput={(e) => e.currentTarget.setCustomValidity('')}
                   placeholder="e.g. 4829"
                   className="h-8 w-28 text-center text-sm font-mono font-bold tracking-widest rounded-lg border border-cyan-300 bg-white focus:outline-none focus:ring-1 focus:ring-cyan-600"
                 />

@@ -80,18 +80,22 @@ export default function SettingsPage() {
     setProfileSuccess('');
 
     if (!fullName.trim()) {
-      setProfileError('Full name is required.');
+      setProfileError('Please fill out Full Name.');
       return;
     }
 
     const cleanPhone = phone.replace(/\D/g, '');
-    if (!cleanPhone || cleanPhone.length !== 10) {
+    if (!cleanPhone) {
+      setProfileError('Please fill out Phone Number.');
+      return;
+    }
+    if (cleanPhone.length !== 10) {
       setProfileError('Phone number must be exactly 10 digits.');
       return;
     }
 
     if (!area.trim()) {
-      setProfileError('Neighborhood / location is required.');
+      setProfileError('Please fill out Neighborhood Location.');
       return;
     }
 
@@ -126,12 +130,17 @@ export default function SettingsPage() {
     setPasswordSuccess('');
 
     if (!newPassword) {
-      setPasswordError('Please enter a new password.');
+      setPasswordError('Please fill out New Password.');
       return;
     }
 
     if (newPassword.length < 6) {
       setPasswordError('Password must be at least 6 characters long.');
+      return;
+    }
+
+    if (!confirmNewPassword) {
+      setPasswordError('Please fill out Confirm Password.');
       return;
     }
 
@@ -213,64 +222,70 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <form onSubmit={handleUpdateProfile} className="space-y-3.5">
+            <form onSubmit={handleUpdateProfile} autoComplete="off" className="space-y-4">
               {profileSuccess && (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl flex items-center gap-2 text-xs font-medium animate-in fade-in">
+                <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl flex items-center gap-2.5 text-sm font-medium animate-in fade-in">
                   <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
                   <span>{profileSuccess}</span>
                 </div>
               )}
 
               {profileError && (
-                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl flex items-center gap-2 text-xs font-medium animate-in fade-in">
+                <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl flex items-center gap-2.5 text-sm font-medium animate-in fade-in">
                   <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
                   <span>{profileError}</span>
                 </div>
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-700">Full Name</label>
+                <div className="space-y-1.5">
+                  <label className="text-xs sm:text-sm font-semibold text-slate-700">Full Name</label>
                   <Input
                     type="text"
+                    fieldName="Full Name"
                     required
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     placeholder="e.g. John Doe"
-                    className="h-9 rounded-xl bg-slate-50/80 border-slate-200 focus:bg-white text-xs"
+                    autoComplete="off"
+                    showClear
+                    className="h-11 rounded-xl bg-slate-50/80 border-slate-200 focus:bg-white text-sm"
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-700">Email (Locked)</label>
+                <div className="space-y-1.5">
+                  <label className="text-xs sm:text-sm font-semibold text-slate-700">Email (Locked)</label>
                   <Input
                     type="email"
                     disabled
                     value={user.email || ''}
-                    className="h-9 rounded-xl bg-slate-100 border-slate-200 text-slate-500 text-xs cursor-not-allowed"
+                    className="h-11 rounded-xl bg-slate-100 border-slate-200 text-slate-500 text-sm cursor-not-allowed"
                   />
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1.5">
-                  <Phone className="w-3 h-3 text-slate-400" /> Phone Number (10 digits)
+              <div className="space-y-1.5">
+                <label className="text-xs sm:text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+                  <Phone className="w-4 h-4 text-slate-400" /> Phone Number (10 digits)
                 </label>
                 <Input
                   type="tel"
+                  fieldName="Phone Number"
                   inputMode="numeric"
                   maxLength={10}
                   required
                   value={phone}
                   onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
                   placeholder="5550000000"
-                  className="h-9 rounded-xl bg-slate-50/80 border-slate-200 focus:bg-white text-xs font-mono"
+                  autoComplete="off"
+                  showClear
+                  className="h-11 rounded-xl bg-slate-50/80 border-slate-200 focus:bg-white text-sm font-mono"
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1.5">
-                  <MapPin className="w-3 h-3 text-slate-400" /> Neighborhood Map Pin
+              <div className="space-y-1.5">
+                <label className="text-xs sm:text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+                  <MapPin className="w-4 h-4 text-slate-400" /> Neighborhood Map Pin
                 </label>
                 <LocationPicker
                   defaultLocation={area}
@@ -347,6 +362,7 @@ export default function SettingsPage() {
                   <div className="relative">
                     <Input
                       type={showNewPassword ? "text" : "password"}
+                      fieldName="New Password"
                       required
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
@@ -368,6 +384,7 @@ export default function SettingsPage() {
                   <div className="relative">
                     <Input
                       type={showConfirmNewPassword ? "text" : "password"}
+                      fieldName="Confirm Password"
                       required
                       value={confirmNewPassword}
                       onChange={(e) => setConfirmNewPassword(e.target.value)}

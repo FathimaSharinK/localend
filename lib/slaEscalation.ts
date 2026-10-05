@@ -59,8 +59,12 @@ export async function evaluateAndEscalateRequest(req: HelpRequest, adminUid?: st
   const minutesLeft = getMinutesUntilDeadline(req.date, req.startTime);
   if (minutesLeft === null) return false;
 
-  // Escalate if within 50 minutes, already overdue, or marked URGENT
-  if (minutesLeft <= 50 || req.priority === 'URGENT') {
+  // SLA Escalation is deadline-driven:
+  // - URGENT priority tasks escalate within 120 minutes (2 hrs) of deadline or overdue
+  // - Standard tasks escalate within 50 minutes of deadline or overdue
+  // Future tasks (e.g. tomorrow or hours away) do NOT falsely trigger SLA breach
+  const thresholdMins = req.priority === 'URGENT' ? 120 : 50;
+  if (minutesLeft <= thresholdMins) {
     try {
       await updateDoc(doc(db, 'helpRequests', req.id), {
         isEscalated: true,
@@ -70,14 +74,32 @@ export async function evaluateAndEscalateRequest(req: HelpRequest, adminUid?: st
 
       const deadlineText = minutesLeft <= 0 ? 'OVERDUE' : `in ${minutesLeft} mins`;
 
-      // 1. Fetch department employees & admins to notify them directly
+      // 1. Fetch department employees & admins to notify them directly, and resolve citizen info
       const usersSnap = await getDocs(collection(db, 'users'));
       const targetUserIds: { uid: string; isEmployee: boolean }[] = [];
       const recipientEmails: string[] = [];
+      let requesterUser: {
+        fullName?: string;
+        email?: string;
+        phone?: string;
+        area?: string;
+      } = {
+        fullName: req.requesterName
+      };
 
       usersSnap.forEach((userDoc) => {
         const u = userDoc.data();
         const uid = userDoc.id;
+
+        // Match citizen requester
+        if (uid === req.requesterId) {
+          requesterUser = {
+            fullName: u.fullName || req.requesterName,
+            email: u.email,
+            phone: u.phone,
+            area: u.area || req.location
+          };
+        }
         
         // Match employees of this specific department
         if (u.role === 'employee' && u.department && req.categoryId && 
@@ -119,18 +141,38 @@ export async function evaluateAndEscalateRequest(req: HelpRequest, adminUid?: st
         });
       }
 
-      // 3. Dispatch Email Alert via Next.js API / Nodemailer
+      // 3. Dispatch Email Alert with rich citizen user information and alert nature
       try {
+        const alertReason = minutesLeft !== null && minutesLeft <= 0
+          ? `This ${req.categoryId || ''} task is OVERDUE by ${Math.abs(minutesLeft)} minutes with 0 confirmed specialists or volunteers assigned.`
+          : `This ${req.categoryId || ''} task is within ${minutesLeft ?? 50} minutes of its scheduled deadline (${deadlineText}) with 0 confirmed specialists or volunteers. Direct dispatch or mission claim is required.`;
+
         fetch('/api/send-email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            alertNature: req.priority === 'URGENT' ? 'URGENT_UNASSIGNED' : 'SLA_BREACH',
+            alertTitle: req.priority === 'URGENT'
+              ? `⚡ Urgent ${req.categoryId || 'Emergency'} Request: ${req.title}`
+              : `🚨 Critical SLA Breach Alert: ${req.title}`,
+            alertReason,
+            alertSeverity: 'CRITICAL',
             taskId: req.id,
             taskTitle: req.title,
+            taskDescription: req.description,
             category: req.categoryId,
             location: req.location,
+            coordinates: req.coordinates,
+            scheduledDate: req.date,
+            scheduledTime: req.startTime,
             deadlineText,
             priority: req.priority,
+            status: req.status,
+            requesterId: req.requesterId,
+            requesterName: requesterUser.fullName || req.requesterName,
+            requesterEmail: requesterUser.email,
+            requesterPhone: requesterUser.phone,
+            requesterArea: requesterUser.area || req.location,
             recipientEmails
           })
         }).catch(emailErr => {

@@ -54,11 +54,11 @@ export default function CreateRequestModal({ onClose, editRequest }: { onClose: 
     setError('');
 
     if (!title.trim()) {
-      setError('Please provide a Request Title.');
+      setError('Please fill out Request Title.');
       return;
     }
     if (!description.trim()) {
-      setError('Please provide a Detailed Description.');
+      setError('Please fill out Detailed Description.');
       return;
     }
     if (!category) {
@@ -70,15 +70,15 @@ export default function CreateRequestModal({ onClose, editRequest }: { onClose: 
       return;
     }
     if (!date) {
-      setError('Please select a Target Date.');
+      setError('Please fill out Target Date.');
       return;
     }
     if (!time) {
-      setError('Please specify a Time Window.');
+      setError('Please fill out Time Window.');
       return;
     }
     if (!location.trim()) {
-      setError('Please enter or detect your Location / Neighborhood Area.');
+      setError('Please fill out Location / Neighborhood Area.');
       return;
     }
 
@@ -163,27 +163,30 @@ export default function CreateRequestModal({ onClose, editRequest }: { onClose: 
         </div>
         
         {/* Scrollable Form Body */}
-        <div className="overflow-y-auto p-4 sm:p-5 space-y-3.5 flex-1 custom-scrollbar">
-          <form id="create-request-form" onSubmit={handleSubmit} className="space-y-3">
+        <div className="overflow-y-auto p-4 sm:p-5 space-y-4 flex-1 custom-scrollbar">
+          <form id="create-request-form" onSubmit={handleSubmit} autoComplete="off" className="space-y-4">
             {error && (
-              <div className="text-xs font-semibold text-rose-600 bg-rose-50 p-2.5 rounded-xl border border-rose-200 flex items-center gap-2">
+              <div className="text-sm font-medium text-rose-700 bg-rose-50 p-3 rounded-xl border border-rose-200 flex items-center gap-2.5">
                 <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
                 <span>{error}</span>
               </div>
             )}
             
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1">
+            <div className="space-y-1.5">
+              <label className="text-xs sm:text-sm font-semibold text-slate-700 flex items-center gap-1">
                 <span>Request Title</span>
                 <span className="text-rose-500 font-bold">*</span>
               </label>
               <Input
                 type="text"
+                fieldName="Request Title"
                 required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g., Need help moving heavy sofa down 2 floors"
-                className="h-9 rounded-xl bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 text-xs"
+                autoComplete="off"
+                showClear
+                className="h-10 rounded-xl bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 text-sm"
               />
             </div>
             
@@ -196,7 +199,12 @@ export default function CreateRequestModal({ onClose, editRequest }: { onClose: 
                 className="flex min-h-[75px] w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-blue-600 transition-all resize-none"
                 required
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(e) => {
+                  e.currentTarget.setCustomValidity('');
+                  setDescription(e.target.value);
+                }}
+                onInvalid={(e) => e.currentTarget.setCustomValidity('Please fill out Detailed Description.')}
+                onInput={(e) => e.currentTarget.setCustomValidity('')}
                 placeholder="Describe any tools needed, exact stair flights, timeline flexibility..."
               />
             </div>
@@ -239,7 +247,12 @@ export default function CreateRequestModal({ onClose, editRequest }: { onClose: 
                   required
                   className="flex h-9 w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600 transition-all"
                   value={priority}
-                  onChange={(e) => setPriority(e.target.value as HelpPriority)}
+                  onChange={(e) => {
+                    e.currentTarget.setCustomValidity('');
+                    setPriority(e.target.value as HelpPriority);
+                  }}
+                  onInvalid={(e) => e.currentTarget.setCustomValidity('Please select an Urgency Level.')}
+                  onInput={(e) => e.currentTarget.setCustomValidity('')}
                 >
                   <option value="LOW">🟢 Low Priority</option>
                   <option value="NORMAL">🔵 Normal Priority</option>
@@ -256,6 +269,7 @@ export default function CreateRequestModal({ onClose, editRequest }: { onClose: 
                 </label>
                 <Input
                   type="date"
+                  fieldName="Target Date"
                   required
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
@@ -271,6 +285,7 @@ export default function CreateRequestModal({ onClose, editRequest }: { onClose: 
                 </label>
                 <Input
                   type="time"
+                  fieldName="Time Window"
                   required
                   value={time}
                   onChange={(e) => setTime(e.target.value)}

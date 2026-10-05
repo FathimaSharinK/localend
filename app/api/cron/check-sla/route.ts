@@ -47,12 +47,15 @@ async function performSlaCheck() {
 
     // 2. Fetch users to identify department specialists and administrators
     const usersSnap = await getDocs(collection(db, 'users'));
-    const allUsers: { uid: string; email?: string; role?: string; department?: string }[] = [];
+    const allUsers: { uid: string; fullName?: string; email?: string; role?: string; department?: string; phone?: string; area?: string }[] = [];
     usersSnap.forEach((uDoc) => {
       const data = uDoc.data();
       allUsers.push({
         uid: uDoc.id,
+        fullName: data.fullName,
         email: data.email,
+        phone: data.phone,
+        area: data.area,
         role: data.role,
         department: data.department
       });
@@ -72,12 +75,14 @@ async function performSlaCheck() {
       if (req.isEscalated || !req.id) continue;
 
       const minutesLeft = getMinutesUntilDeadline(req.date, req.startTime);
-      const isUrgent = req.priority === 'URGENT';
-      const isNearDeadline = minutesLeft !== null && minutesLeft <= 50;
+      if (minutesLeft === null) continue;
 
-      console.log(`[Cron] Checking "${req.title}" (ID: ${req.id}) | minutesLeft: ${minutesLeft} | isUrgent: ${isUrgent} | isNearDeadline: ${isNearDeadline}`);
+      const threshold = req.priority === 'URGENT' ? 120 : 50;
+      const isBreachingSla = minutesLeft <= threshold;
 
-      if (isNearDeadline || isUrgent) {
+      console.log(`[Cron] Checking "${req.title}" (ID: ${req.id}) | minutesLeft: ${minutesLeft} | threshold: ${threshold}m | isBreachingSla: ${isBreachingSla}`);
+
+      if (isBreachingSla) {
         console.log(`🚨 [Cron] Escalating request "${req.title}" (ID: ${req.id}) - Minutes left: ${minutesLeft}`);
 
         // A. Mark as escalated in Firestore immediately
@@ -87,7 +92,7 @@ async function performSlaCheck() {
           updatedAt: timestamp
         });
 
-        const deadlineText = minutesLeft === null ? 'URGENT PRIORITY' : minutesLeft <= 0 ? 'OVERDUE' : `in ${minutesLeft} mins`;
+        const deadlineText = minutesLeft <= 0 ? 'OVERDUE' : `in ${minutesLeft} mins`;
 
         // B. Target relevant users (Admins & Department Employees)
         const targetUserIds: { uid: string; isEmployee: boolean }[] = [];
@@ -112,6 +117,8 @@ async function performSlaCheck() {
           }
         }
 
+        const citizenUser = allUsers.find(u => u.uid === req.requesterId);
+
         // C. Dispatch in-app notifications
         for (const target of targetUserIds) {
           const notifTitle = target.isEmployee
@@ -133,14 +140,34 @@ async function performSlaCheck() {
           });
         }
 
-        // D. Dispatch Nodemailer Email directly
+        // D. Dispatch Nodemailer Email directly with specific citizen details and alert nature
+        const alertReason = minutesLeft !== null && minutesLeft <= 0
+          ? `This ${req.categoryId || ''} task is OVERDUE by ${Math.abs(minutesLeft)} minutes with 0 confirmed specialists or volunteers assigned.`
+          : `This ${req.categoryId || ''} task is within ${minutesLeft ?? 50} minutes of its scheduled deadline (${deadlineText}) with 0 confirmed specialists or volunteers. Direct dispatch or mission claim is required.`;
+
         await sendSlaAlertEmail({
+          alertNature: req.priority === 'URGENT' ? 'URGENT_UNASSIGNED' : 'SLA_BREACH',
+          alertTitle: req.priority === 'URGENT'
+            ? `⚡ Urgent ${req.categoryId || 'Emergency'} Request: ${req.title}`
+            : `🚨 Critical SLA Breach Alert: ${req.title}`,
+          alertReason,
+          alertSeverity: 'CRITICAL',
           taskId: req.id,
           taskTitle: req.title,
+          taskDescription: req.description,
           category: req.categoryId,
           location: req.location,
+          coordinates: req.coordinates,
+          scheduledDate: req.date,
+          scheduledTime: req.startTime,
           deadlineText,
           priority: req.priority,
+          status: req.status,
+          requesterId: req.requesterId,
+          requesterName: citizenUser?.fullName || req.requesterName || 'Community Citizen',
+          requesterEmail: citizenUser?.email,
+          requesterPhone: citizenUser?.phone,
+          requesterArea: citizenUser?.area || req.location,
           recipientEmails
         });
 

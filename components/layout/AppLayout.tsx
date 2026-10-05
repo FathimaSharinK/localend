@@ -129,7 +129,7 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
               href="/admin?tab=overview"
               onClick={() => setMobileMenuOpen(false)}
               className={cn(
-                "flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors font-medium text-xs",
+                "flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-colors font-medium text-sm",
                 currentTab === 'overview'
                   ? "bg-blue-50 text-blue-700 font-semibold"
                   : "text-slate-600 hover:bg-slate-100/70 hover:text-slate-900"
@@ -143,7 +143,7 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
               href="/admin?tab=employees"
               onClick={() => setMobileMenuOpen(false)}
               className={cn(
-                "flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors font-medium text-xs",
+                "flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-colors font-medium text-sm",
                 currentTab === 'employees'
                   ? "bg-blue-50 text-blue-700 font-semibold"
                   : "text-slate-600 hover:bg-slate-100/70 hover:text-slate-900"
@@ -157,7 +157,7 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
               href="/admin?tab=users"
               onClick={() => setMobileMenuOpen(false)}
               className={cn(
-                "flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors font-medium text-xs",
+                "flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-colors font-medium text-sm",
                 currentTab === 'users'
                   ? "bg-blue-50 text-blue-700 font-semibold"
                   : "text-slate-600 hover:bg-slate-100/70 hover:text-slate-900"
@@ -171,7 +171,7 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
               href="/admin?tab=departments"
               onClick={() => setMobileMenuOpen(false)}
               className={cn(
-                "flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors font-medium text-xs",
+                "flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-colors font-medium text-sm",
                 currentTab === 'departments'
                   ? "bg-blue-50 text-blue-700 font-semibold"
                   : "text-slate-600 hover:bg-slate-100/70 hover:text-slate-900"
@@ -185,7 +185,7 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
               href="/admin?tab=tasks"
               onClick={() => setMobileMenuOpen(false)}
               className={cn(
-                "flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors font-medium text-xs",
+                "flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-colors font-medium text-sm",
                 currentTab === 'tasks'
                   ? "bg-blue-50 text-blue-700 font-semibold"
                   : "text-slate-600 hover:bg-slate-100/70 hover:text-slate-900"
@@ -199,7 +199,7 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
               href="/admin?tab=settings"
               onClick={() => setMobileMenuOpen(false)}
               className={cn(
-                "flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors font-medium text-xs",
+                "flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-colors font-medium text-sm",
                 currentTab === 'settings'
                   ? "bg-blue-50 text-blue-700 font-semibold"
                   : "text-slate-600 hover:bg-slate-100/70 hover:text-slate-900"
@@ -214,9 +214,9 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
           <div className="p-3 border-t border-slate-100">
             <button 
               onClick={handleLogout}
-              className="flex items-center w-full gap-2 px-3 py-2 text-xs font-medium text-slate-500 rounded-lg hover:bg-rose-50 hover:text-rose-600 transition-colors"
+              className="flex items-center w-full gap-2 px-3 py-2 text-sm font-medium text-slate-500 rounded-lg hover:bg-rose-50 hover:text-rose-600 transition-colors cursor-pointer"
             >
-              <LogOut className="h-3.5 w-3.5" />
+              <LogOut className="h-4 w-4" />
               <span>Sign Out</span>
             </button>
           </div>
@@ -256,13 +256,13 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
                 href={item.to}
                 onClick={() => setMobileMenuOpen(false)}
                 className={cn(
-                  "flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors font-medium text-xs",
+                  "flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-colors font-medium text-sm",
                   isActive 
                     ? "bg-blue-50 text-blue-700 font-semibold" 
                     : "text-slate-600 hover:bg-slate-100/70 hover:text-slate-900"
                 )}
               >
-                <item.icon className={cn("h-4 w-4 shrink-0", isActive ? "text-blue-600" : "text-slate-400")} />
+                <item.icon className={cn("h-4.5 w-4.5 shrink-0", isActive ? "text-blue-600" : "text-slate-400")} />
                 <span>{item.label}</span>
               </Link>
             );
@@ -270,14 +270,14 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
         </nav>
 
         {/* User Card & Logout */}
-        <div className="p-3 border-t border-slate-100 space-y-1.5">
-          <div className="flex items-center gap-2.5 p-2 rounded-lg bg-slate-50 border border-slate-100">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
+        <div className="p-3 border-t border-slate-100 space-y-2">
+          <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-bold text-sm shrink-0">
               {profile?.fullName?.charAt(0) || 'U'}
             </div>
             <div className="min-w-0 flex-1 leading-tight">
-              <p className="text-xs font-semibold text-slate-800 truncate">{profile?.fullName || 'Neighbor'}</p>
-              <p className="text-[10px] text-slate-400 truncate">
+              <p className="text-sm font-semibold text-slate-800 truncate">{profile?.fullName || 'Neighbor'}</p>
+              <p className="text-xs text-slate-500 truncate">
                 {profile?.role === 'employee' ? `${profile.department || 'Specialist'} Department` : profile?.area || 'Verified Citizen'}
               </p>
             </div>
@@ -285,9 +285,9 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
           
           <button 
             onClick={handleLogout}
-            className="flex items-center w-full gap-2 px-2.5 py-1.5 text-xs font-medium text-slate-500 rounded-lg hover:bg-slate-100 hover:text-slate-800 transition-colors"
+            className="flex items-center w-full gap-2 px-3 py-2 text-sm font-medium text-slate-500 rounded-lg hover:bg-slate-100 hover:text-slate-800 transition-colors cursor-pointer"
           >
-            <LogOut className="h-3.5 w-3.5" />
+            <LogOut className="h-4 w-4" />
             <span>Sign out</span>
           </button>
         </div>

@@ -163,6 +163,39 @@ function AdminContent() {
   const [editUserPhone, setEditUserPhone] = useState('');
   const [isUpdatingUser, setIsUpdatingUser] = useState(false);
 
+  // Modal Reset and Clear handlers to ensure form inputs do not persist statically
+  const resetAndCloseAddEmpModal = () => {
+    setAddEmpModalOpen(false);
+    setNewEmpName('');
+    setNewEmpEmail('');
+    setNewEmpPhone('');
+    setNewEmpPassword('');
+  };
+
+  const openAddEmpModal = () => {
+    setNewEmpName('');
+    setNewEmpEmail('');
+    setNewEmpPhone('');
+    setNewEmpPassword('');
+    setAddEmpModalOpen(true);
+  };
+
+  const resetAndCloseAddUserModal = () => {
+    setAddUserModalOpen(false);
+    setNewUserName('');
+    setNewUserEmail('');
+    setNewUserPhone('');
+    setNewUserPassword('');
+  };
+
+  const openAddUserModal = () => {
+    setNewUserName('');
+    setNewUserEmail('');
+    setNewUserPhone('');
+    setNewUserPassword('');
+    setAddUserModalOpen(true);
+  };
+
   // Add Department Modal State
   const [addDeptModalOpen, setAddDeptModalOpen] = useState(false);
   const [newDeptName, setNewDeptName] = useState('');
@@ -271,10 +304,21 @@ function AdminContent() {
     const unsubRequests = onSnapshot(collection(db, 'helpRequests'), (snap) => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as HelpRequest));
       setRequestsList(sortByLatestScheduled(data));
-      // Auto-escalate any open requests approaching deadline (<= 50 mins or URGENT)
+      // Auto-escalate open requests approaching deadline (<= 120 mins for URGENT, <= 50 mins for others)
       data.forEach(req => {
-        if (req.status === 'OPEN' && !req.isEscalated) {
-          evaluateAndEscalateRequest(req, user.uid);
+        if (req.status === 'OPEN') {
+          const mins = getMinutesUntilDeadline(req.date, req.startTime);
+          const threshold = req.priority === 'URGENT' ? 120 : 50;
+          if (mins !== null) {
+            if (mins <= threshold && !req.isEscalated) {
+              evaluateAndEscalateRequest(req, user.uid);
+            } else if (mins > threshold && req.isEscalated && req.id) {
+              // Self-heal: reset any future tasks that were prematurely marked escalated
+              updateDoc(doc(db, 'helpRequests', req.id), {
+                isEscalated: false
+              }).catch(() => {});
+            }
+          }
         }
       });
     }, (err) => console.warn('Requests snapshot error:', err));
@@ -348,13 +392,14 @@ function AdminContent() {
     );
   }, [citizensList, userSearch]);
 
-  // SLA Escalated / Urgent Unassigned Requests
+  // SLA Escalated Requests (Only tasks legitimately approaching deadline or overdue)
   const escalatedRequests = useMemo(() => {
     return requestsList.filter(req => {
       if (req.status !== 'OPEN') return false;
-      if (req.isEscalated) return true;
       const mins = getMinutesUntilDeadline(req.date, req.startTime);
-      return mins !== null && mins <= 50;
+      if (mins === null) return false;
+      const threshold = req.priority === 'URGENT' ? 120 : 50;
+      return mins <= threshold;
     });
   }, [requestsList]);
 
@@ -475,23 +520,31 @@ function AdminContent() {
   const handleCreateEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newEmpName.trim()) {
-      showMessage('Technician Name is required.', 'error');
+      showMessage('Please fill out Technician Name.', 'error');
       return;
     }
     if (!newEmpEmail.trim()) {
-      showMessage('Email Address is required.', 'error');
+      showMessage('Please fill out Email Address.', 'error');
       return;
     }
     const cleanPhone = newEmpPhone.replace(/\D/g, '').slice(0, 10);
+    if (!cleanPhone) {
+      showMessage('Please fill out Phone Number.', 'error');
+      return;
+    }
     if (cleanPhone.length !== 10) {
       showMessage('Phone must be a valid 10-digit number.', 'error');
       return;
     }
     if (!newEmpDept) {
-      showMessage('Department selection is required.', 'error');
+      showMessage('Please select an Assigned Department.', 'error');
       return;
     }
-    if (!newEmpPassword.trim() || newEmpPassword.length < 6) {
+    if (!newEmpPassword.trim()) {
+      showMessage('Please fill out Login Password.', 'error');
+      return;
+    }
+    if (newEmpPassword.length < 6) {
       showMessage('Password is required and must be at least 6 characters.', 'error');
       return;
     }
@@ -530,17 +583,21 @@ function AdminContent() {
   const handleUpdateEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingEmployee?.uid || !editEmpName.trim()) {
-      showMessage('Technician name is required.', 'error');
+      showMessage('Please fill out Technician Name.', 'error');
       return;
     }
 
     const cleanPhone = editEmpPhone.replace(/\D/g, '').slice(0, 10);
+    if (!cleanPhone) {
+      showMessage('Please fill out Phone Number.', 'error');
+      return;
+    }
     if (cleanPhone.length !== 10) {
       showMessage('Phone must be a valid 10-digit number.', 'error');
       return;
     }
     if (!editEmpDept) {
-      showMessage('Department selection is required.', 'error');
+      showMessage('Please select an Assigned Department.', 'error');
       return;
     }
 
@@ -566,19 +623,27 @@ function AdminContent() {
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUserName.trim()) {
-      showMessage('Citizen Name is required.', 'error');
+      showMessage('Please fill out Citizen Name.', 'error');
       return;
     }
     if (!newUserEmail.trim()) {
-      showMessage('Email Address is required.', 'error');
+      showMessage('Please fill out Email Address.', 'error');
       return;
     }
     const cleanPhone = newUserPhone.replace(/\D/g, '').slice(0, 10);
+    if (!cleanPhone) {
+      showMessage('Please fill out Phone Number.', 'error');
+      return;
+    }
     if (cleanPhone.length !== 10) {
       showMessage('Phone must be a valid 10-digit number.', 'error');
       return;
     }
-    if (!newUserPassword.trim() || newUserPassword.length < 6) {
+    if (!newUserPassword.trim()) {
+      showMessage('Please fill out Login Password.', 'error');
+      return;
+    }
+    if (newUserPassword.length < 6) {
       showMessage('Password is required and must be at least 6 characters.', 'error');
       return;
     }
@@ -616,11 +681,15 @@ function AdminContent() {
   const handleUpdateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser?.uid || !editUserName.trim()) {
-      showMessage('User name is required.', 'error');
+      showMessage('Please fill out Citizen Name.', 'error');
       return;
     }
 
     const cleanPhone = editUserPhone.replace(/\D/g, '').slice(0, 10);
+    if (!cleanPhone) {
+      showMessage('Please fill out Phone Number.', 'error');
+      return;
+    }
     if (cleanPhone.length !== 10) {
       showMessage('Phone must be a valid 10-digit number.', 'error');
       return;
@@ -647,7 +716,7 @@ function AdminContent() {
   const handleCreateDept = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newDeptName.trim()) {
-      showMessage('Department name is required.', 'error');
+      showMessage('Please fill out Department Name.', 'error');
       return;
     }
 
@@ -678,7 +747,7 @@ function AdminContent() {
   const handleUpdateDept = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingDept?.id || !editDeptName.trim()) {
-      showMessage('Department name is required.', 'error');
+      showMessage('Please fill out Department Name.', 'error');
       return;
     }
 
@@ -771,31 +840,31 @@ function AdminContent() {
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!taskTitle.trim()) {
-      showMessage('Task title is required.', 'error');
+      showMessage('Please fill out Task Title.', 'error');
       return;
     }
     if (!taskDesc.trim()) {
-      showMessage('Task description is required.', 'error');
+      showMessage('Please fill out Task Description.', 'error');
       return;
     }
     if (!taskCategory) {
-      showMessage('Department is required.', 'error');
+      showMessage('Please select an Assigned Department.', 'error');
       return;
     }
     if (!taskPriority) {
-      showMessage('Priority level is required.', 'error');
+      showMessage('Please select a Priority Level.', 'error');
       return;
     }
     if (!taskDate) {
-      showMessage('Scheduled date is required.', 'error');
+      showMessage('Please fill out Scheduled Date.', 'error');
       return;
     }
     if (!taskTime) {
-      showMessage('Scheduled time is required.', 'error');
+      showMessage('Please fill out Scheduled Time.', 'error');
       return;
     }
     if (!taskLocation.trim()) {
-      showMessage('Location / Area is required.', 'error');
+      showMessage('Please fill out Location / Area.', 'error');
       return;
     }
 
@@ -862,31 +931,31 @@ function AdminContent() {
     e.preventDefault();
     if (!editingTask?.id) return;
     if (!editTaskTitle.trim()) {
-      showMessage('Task title is required.', 'error');
+      showMessage('Please fill out Task Title.', 'error');
       return;
     }
     if (!editTaskDesc.trim()) {
-      showMessage('Task description is required.', 'error');
+      showMessage('Please fill out Task Description.', 'error');
       return;
     }
     if (!editTaskCategory) {
-      showMessage('Department is required.', 'error');
+      showMessage('Please select an Assigned Department.', 'error');
       return;
     }
     if (!editTaskPriority) {
-      showMessage('Priority is required.', 'error');
+      showMessage('Please select a Priority Level.', 'error');
       return;
     }
     if (!editTaskDate) {
-      showMessage('Scheduled date is required.', 'error');
+      showMessage('Please fill out Scheduled Date.', 'error');
       return;
     }
     if (!editTaskTime) {
-      showMessage('Scheduled time is required.', 'error');
+      showMessage('Please fill out Scheduled Time.', 'error');
       return;
     }
     if (!editTaskLocation.trim()) {
-      showMessage('Location / Area is required.', 'error');
+      showMessage('Please fill out Location / Area.', 'error');
       return;
     }
 
@@ -954,11 +1023,15 @@ function AdminContent() {
     if (!user) return;
 
     if (!adminFullName.trim()) {
-      showMessage('Admin full name is required.', 'error');
+      showMessage('Please fill out Full Name.', 'error');
       return;
     }
 
     const cleanPhone = adminPhone.replace(/\D/g, '');
+    if (!cleanPhone) {
+      showMessage('Please fill out Phone Number.', 'error');
+      return;
+    }
     if (cleanPhone.length !== 10) {
       showMessage('Admin phone number must be exactly 10 digits.', 'error');
       return;
@@ -987,8 +1060,17 @@ function AdminContent() {
     e.preventDefault();
     if (!user) return;
 
-    if (!adminNewPassword || adminNewPassword.length < 6) {
+    if (!adminNewPassword) {
+      showMessage('Please fill out New Password.', 'error');
+      return;
+    }
+    if (adminNewPassword.length < 6) {
       showMessage('Password must be at least 6 characters long.', 'error');
+      return;
+    }
+
+    if (!adminConfirmPassword) {
+      showMessage('Please fill out Confirm New Password.', 'error');
       return;
     }
 
@@ -1174,7 +1256,12 @@ function AdminContent() {
                   {escalatedRequests.map(req => {
                     const mins = getMinutesUntilDeadline(req.date, req.startTime);
                     return (
-                      <div key={req.id} className="p-3.5 bg-white rounded-xl border border-rose-200 shadow-2xs flex flex-col justify-between">
+                      <div 
+                        key={req.id} 
+                        onClick={() => setViewingTask(req)}
+                        className="p-3.5 bg-white hover:bg-rose-50/40 rounded-xl border border-rose-200 hover:border-rose-300 shadow-2xs flex flex-col justify-between transition-all cursor-pointer group"
+                        title="Click to view task details"
+                      >
                         <div>
                           <div className="flex items-center justify-between mb-1.5">
                             <span className={cn("px-2 py-0.5 rounded-md text-[10px] font-bold border", getCategoryBadge(req.categoryId))}>
@@ -1207,7 +1294,8 @@ function AdminContent() {
                           <span className="text-[10px] text-rose-600 font-semibold">Unclaimed by Technicians</span>
                           <Button
                             size="sm"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setDispatchModalReq(req);
                               setTargetEmployeeUid('');
                             }}
@@ -1232,13 +1320,18 @@ function AdminContent() {
               </h3>
               <div className="space-y-2">
                 {requestsList.slice(0, 5).map(req => (
-                  <div key={req.id} className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
+                  <div 
+                    key={req.id} 
+                    onClick={() => setViewingTask(req)}
+                    className="p-2.5 bg-slate-50 hover:bg-blue-50/60 rounded-xl border border-slate-100 hover:border-blue-200 flex items-center justify-between transition-all cursor-pointer group"
+                    title="Click to view full task details"
+                  >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-[10px] shrink-0">
+                      <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 group-hover:bg-blue-600 group-hover:text-white transition-colors flex items-center justify-center font-bold text-[10px] shrink-0">
                         {req.categoryId?.charAt(0) || 'R'}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold text-slate-900 truncate">{req.title}</p>
+                        <p className="text-xs font-semibold text-slate-900 group-hover:text-blue-700 truncate transition-colors">{req.title}</p>
                         <p className="text-[10px] text-slate-400 truncate flex items-center gap-1">
                           <span>{req.categoryId} • by {req.requesterName} •</span>
                           <a
@@ -1254,7 +1347,10 @@ function AdminContent() {
                         </p>
                       </div>
                     </div>
-                    <span className={cn("px-2 py-0.5 rounded-md text-[10px] font-semibold shrink-0 ml-2", getStatusBadge(req.status))}>
+                    <span 
+                      className={cn("px-2 py-0.5 rounded-md text-[10px] font-semibold shrink-0 ml-2 group-hover:shadow-xs transition-all", getStatusBadge(req.status))}
+                      title="Status: Click to view details"
+                    >
                       {req.status}
                     </span>
                   </div>
@@ -1295,7 +1391,7 @@ function AdminContent() {
               </div>
 
               <Button
-                onClick={() => setAddEmpModalOpen(true)}
+                onClick={() => openAddEmpModal()}
                 className="h-9 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs cursor-pointer flex items-center gap-1.5"
               >
                 <UserPlus className="w-3.5 h-3.5" />
@@ -1429,7 +1525,7 @@ function AdminContent() {
                   {filteredCitizens.length} Registered Citizens
                 </p>
                 <Button
-                  onClick={() => setAddUserModalOpen(true)}
+                  onClick={() => openAddUserModal()}
                   className="h-9 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs cursor-pointer flex items-center gap-1.5"
                 >
                   <UserPlus className="w-3.5 h-3.5" />
@@ -1868,6 +1964,7 @@ function AdminContent() {
                     <label className="text-[11px] font-semibold text-slate-600">Full Name</label>
                     <Input
                       type="text"
+                      fieldName="Full Name"
                       required
                       value={adminFullName}
                       onChange={(e) => setAdminFullName(e.target.value)}
@@ -1878,6 +1975,7 @@ function AdminContent() {
                     <label className="text-[11px] font-semibold text-slate-600">Phone</label>
                     <Input
                       type="tel"
+                      fieldName="Phone Number"
                       required
                       value={adminPhone}
                       onChange={(e) => setAdminPhone(e.target.value)}
@@ -1918,6 +2016,7 @@ function AdminContent() {
                     <label className="text-[11px] font-semibold text-slate-600">New Password</label>
                     <Input
                       type="password"
+                      fieldName="New Password"
                       required
                       value={adminNewPassword}
                       onChange={(e) => setAdminNewPassword(e.target.value)}
@@ -1929,6 +2028,7 @@ function AdminContent() {
                     <label className="text-[11px] font-semibold text-slate-600">Confirm New Password</label>
                     <Input
                       type="password"
+                      fieldName="Confirm New Password"
                       required
                       value={adminConfirmPassword}
                       onChange={(e) => setAdminConfirmPassword(e.target.value)}
@@ -2126,65 +2226,79 @@ function AdminContent() {
                     <p className="text-[11px] text-slate-500">Create employee credentials in department</p>
                   </div>
                 </div>
-                <button onClick={() => setAddEmpModalOpen(false)} className="p-1 rounded-lg text-slate-400 hover:text-slate-600">
+                <button onClick={resetAndCloseAddEmpModal} className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer">
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <form onSubmit={handleCreateEmployee} className="space-y-3">
+              <form onSubmit={handleCreateEmployee} autoComplete="off" className="space-y-3.5">
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-600">
+                  <label className="text-xs font-semibold text-slate-700">
                     Technician Full Name <span className="text-rose-500">*</span>
                   </label>
                   <Input
                     type="text"
+                    fieldName="Technician Full Name"
                     required
                     value={newEmpName}
                     onChange={(e) => setNewEmpName(e.target.value)}
                     placeholder="e.g. John Doe"
-                    className="h-9 rounded-xl text-xs"
+                    autoComplete="off"
+                    showClear
+                    className="h-10 rounded-xl text-sm"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-600">
+                  <label className="text-xs font-semibold text-slate-700">
                     Email Address <span className="text-rose-500">*</span>
                   </label>
                   <Input
                     type="email"
+                    fieldName="Email Address"
                     required
                     value={newEmpEmail}
                     onChange={(e) => setNewEmpEmail(e.target.value)}
                     placeholder="john@localend.com"
-                    className="h-9 rounded-xl text-xs"
+                    autoComplete="off"
+                    showClear
+                    className="h-10 rounded-xl text-sm"
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2.5">
                   <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-600">
+                    <label className="text-xs font-semibold text-slate-700">
                       Phone (10 digits) <span className="text-rose-500">*</span>
                     </label>
                     <Input
                       type="tel"
+                      fieldName="Phone Number"
                       required
                       minLength={10}
                       maxLength={10}
                       value={newEmpPhone}
                       onChange={(e) => setNewEmpPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
                       placeholder="9876543210"
-                      className="h-9 rounded-xl text-xs font-mono"
+                      autoComplete="off"
+                      showClear
+                      className="h-10 rounded-xl text-sm font-mono"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-600">
+                    <label className="text-xs font-semibold text-slate-700">
                       Assigned Department <span className="text-rose-500">*</span>
                     </label>
                     <select
                       required
                       value={newEmpDept}
-                      onChange={(e) => setNewEmpDept(e.target.value)}
-                      className="w-full h-9 rounded-xl bg-white border border-slate-200 text-xs px-3 focus:outline-none focus:border-blue-600 font-semibold"
+                      onChange={(e) => {
+                        e.currentTarget.setCustomValidity('');
+                        setNewEmpDept(e.target.value);
+                      }}
+                      onInvalid={(e) => e.currentTarget.setCustomValidity('Please select an Assigned Department.')}
+                      onInput={(e) => e.currentTarget.setCustomValidity('')}
+                      className="w-full h-10 rounded-xl bg-white border border-slate-200 text-sm px-3 focus:outline-none focus:border-blue-600 font-medium cursor-pointer"
                     >
                       {departmentsList.map(d => (
                         <option key={d.id || d.name} value={d.name}>
@@ -2196,29 +2310,31 @@ function AdminContent() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-600">
+                  <label className="text-xs font-semibold text-slate-700">
                     Login Password <span className="text-rose-500">*</span>
                   </label>
                   <Input
                     type="password"
+                    fieldName="Login Password"
                     required
                     minLength={6}
                     value={newEmpPassword}
                     onChange={(e) => setNewEmpPassword(e.target.value)}
                     placeholder="Minimum 6 characters"
-                    className="h-9 rounded-xl text-xs font-mono"
+                    autoComplete="new-password"
+                    className="h-10 rounded-xl text-sm font-mono"
                   />
-                  <p className="text-[10px] text-slate-400">Employee will use this password to sign in at /login</p>
+                  <p className="text-[11px] text-slate-400">Employee will use this password to sign in at /login</p>
                 </div>
 
                 <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-                  <Button variant="ghost" size="sm" type="button" onClick={() => setAddEmpModalOpen(false)} className="h-8 text-xs">
+                  <Button variant="ghost" size="sm" type="button" onClick={resetAndCloseAddEmpModal} className="h-9 text-xs sm:text-sm cursor-pointer">
                     Cancel
                   </Button>
                   <Button
                     type="submit"
                     disabled={isSavingEmp}
-                    className="h-8 px-4 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-xs"
+                    className="h-9 px-4 text-xs sm:text-sm font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-xs cursor-pointer"
                   >
                     {isSavingEmp ? 'Registering...' : 'Register Specialist'}
                   </Button>
@@ -2254,6 +2370,7 @@ function AdminContent() {
                   </label>
                   <Input
                     type="text"
+                    fieldName="Technician Full Name"
                     required
                     value={editEmpName}
                     onChange={(e) => setEditEmpName(e.target.value)}
@@ -2268,6 +2385,7 @@ function AdminContent() {
                     </label>
                     <Input
                       type="tel"
+                      fieldName="Phone Number"
                       required
                       minLength={10}
                       maxLength={10}
@@ -2284,7 +2402,12 @@ function AdminContent() {
                     <select
                       required
                       value={editEmpDept}
-                      onChange={(e) => setEditEmpDept(e.target.value)}
+                      onChange={(e) => {
+                        e.currentTarget.setCustomValidity('');
+                        setEditEmpDept(e.target.value);
+                      }}
+                      onInvalid={(e) => e.currentTarget.setCustomValidity('Please select an Assigned Department.')}
+                      onInput={(e) => e.currentTarget.setCustomValidity('')}
                       className="w-full h-9 rounded-xl bg-white border border-slate-200 text-xs px-3 focus:outline-none focus:border-blue-600 font-semibold"
                     >
                       {departmentsList.map(d => (
@@ -2327,81 +2450,92 @@ function AdminContent() {
                     <p className="text-[11px] text-slate-500">Register a new community citizen into the system</p>
                   </div>
                 </div>
-                <button onClick={() => setAddUserModalOpen(false)} className="p-1 rounded-lg text-slate-400 hover:text-slate-600">
+                <button onClick={resetAndCloseAddUserModal} className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer">
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <form onSubmit={handleCreateUser} className="space-y-3">
+              <form onSubmit={handleCreateUser} autoComplete="off" className="space-y-3.5">
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-600">
+                  <label className="text-xs font-semibold text-slate-700">
                     Citizen Full Name <span className="text-rose-500">*</span>
                   </label>
                   <Input
                     type="text"
+                    fieldName="Citizen Full Name"
                     required
                     value={newUserName}
                     onChange={(e) => setNewUserName(e.target.value)}
                     placeholder="e.g. Rahul Sharma"
-                    className="h-9 rounded-xl text-xs"
+                    autoComplete="off"
+                    showClear
+                    className="h-10 rounded-xl text-sm"
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2.5">
                   <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-600">
+                    <label className="text-xs font-semibold text-slate-700">
                       Email Address <span className="text-rose-500">*</span>
                     </label>
                     <Input
                       type="email"
+                      fieldName="Email Address"
                       required
                       value={newUserEmail}
                       onChange={(e) => setNewUserEmail(e.target.value)}
                       placeholder="rahul@example.com"
-                      className="h-9 rounded-xl text-xs"
+                      autoComplete="off"
+                      showClear
+                      className="h-10 rounded-xl text-sm"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-600">
+                    <label className="text-xs font-semibold text-slate-700">
                       Phone (10 digits) <span className="text-rose-500">*</span>
                     </label>
                     <Input
                       type="tel"
+                      fieldName="Phone Number"
                       required
                       minLength={10}
                       maxLength={10}
                       value={newUserPhone}
                       onChange={(e) => setNewUserPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
                       placeholder="9876543210"
-                      className="h-9 rounded-xl text-xs font-mono"
+                      autoComplete="off"
+                      showClear
+                      className="h-10 rounded-xl text-sm font-mono"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-600">
+                  <label className="text-xs font-semibold text-slate-700">
                     Login Password <span className="text-rose-500">*</span>
                   </label>
                   <Input
                     type="password"
+                    fieldName="Login Password"
                     required
                     minLength={6}
                     value={newUserPassword}
                     onChange={(e) => setNewUserPassword(e.target.value)}
                     placeholder="Minimum 6 characters"
-                    className="h-9 rounded-xl text-xs font-mono"
+                    autoComplete="new-password"
+                    className="h-10 rounded-xl text-sm font-mono"
                   />
-                  <p className="text-[10px] text-slate-400">Citizen will use this password to sign in at /login</p>
+                  <p className="text-[11px] text-slate-400">Citizen will use this password to sign in at /login</p>
                 </div>
 
                 <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-                  <Button variant="ghost" size="sm" type="button" onClick={() => setAddUserModalOpen(false)} className="h-8 text-xs">
+                  <Button variant="ghost" size="sm" type="button" onClick={resetAndCloseAddUserModal} className="h-9 text-xs sm:text-sm cursor-pointer">
                     Cancel
                   </Button>
                   <Button
                     type="submit"
                     disabled={isSavingUser}
-                    className="h-8 px-4 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-xs"
+                    className="h-9 px-4 text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-xs cursor-pointer"
                   >
                     {isSavingUser ? 'Registering...' : 'Create Citizen'}
                   </Button>
@@ -2437,6 +2571,7 @@ function AdminContent() {
                   </label>
                   <Input
                     type="text"
+                    fieldName="Citizen Full Name"
                     required
                     value={editUserName}
                     onChange={(e) => setEditUserName(e.target.value)}
@@ -2450,6 +2585,7 @@ function AdminContent() {
                   </label>
                   <Input
                     type="tel"
+                    fieldName="Phone Number"
                     required
                     minLength={10}
                     maxLength={10}
@@ -2508,6 +2644,7 @@ function AdminContent() {
                     </div>
                     <Input
                       type="text"
+                      fieldName="Department Name"
                       required
                       value={newDeptName}
                       onChange={(e) => {
@@ -2550,6 +2687,7 @@ function AdminContent() {
                   <label className="text-[11px] font-semibold text-slate-600">Description</label>
                   <Input
                     type="text"
+                    fieldName="Description"
                     value={newDeptDesc}
                     onChange={(e) => setNewDeptDesc(e.target.value)}
                     placeholder="Short description of services offered"
@@ -2562,6 +2700,7 @@ function AdminContent() {
                     <label className="text-[11px] font-semibold text-slate-600">SLA Target (Hours)</label>
                     <Input
                       type="number"
+                      fieldName="SLA Target (Hours)"
                       min={1}
                       max={72}
                       required
@@ -2635,6 +2774,7 @@ function AdminContent() {
                     </div>
                     <Input
                       type="text"
+                      fieldName="Department Name"
                       required
                       value={editDeptName}
                       onChange={(e) => {
@@ -2676,6 +2816,7 @@ function AdminContent() {
                   <label className="text-[11px] font-semibold text-slate-600">Description</label>
                   <Input
                     type="text"
+                    fieldName="Description"
                     value={editDeptDesc}
                     onChange={(e) => setEditDeptDesc(e.target.value)}
                     className="h-9 rounded-xl text-xs"
@@ -2687,6 +2828,7 @@ function AdminContent() {
                     <label className="text-[11px] font-semibold text-slate-600">SLA Target (Hours)</label>
                     <Input
                       type="number"
+                      fieldName="SLA Target (Hours)"
                       min={1}
                       max={72}
                       required
@@ -2795,8 +2937,8 @@ function AdminContent() {
                     <Button
                       size="sm"
                       onClick={() => {
+                        openAddEmpModal();
                         setNewEmpDept(viewingDept.name);
-                        setAddEmpModalOpen(true);
                       }}
                       className="h-7 px-2.5 text-[11px] font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg border border-blue-200 cursor-pointer flex items-center gap-1"
                     >
@@ -3017,6 +3159,7 @@ function AdminContent() {
                   </label>
                   <Input
                     type="text"
+                    fieldName="Task Title"
                     required
                     placeholder="e.g. Water leak repair at community library"
                     value={taskTitle}
@@ -3036,7 +3179,12 @@ function AdminContent() {
                     required
                     placeholder="Provide details about what needs to be done..."
                     value={taskDesc}
-                    onChange={(e) => setTaskDesc(e.target.value)}
+                    onChange={(e) => {
+                      e.currentTarget.setCustomValidity('');
+                      setTaskDesc(e.target.value);
+                    }}
+                    onInvalid={(e) => e.currentTarget.setCustomValidity('Please fill out Task Description.')}
+                    onInput={(e) => e.currentTarget.setCustomValidity('')}
                     className="w-full rounded-xl bg-white border border-slate-200 p-2.5 text-xs text-slate-900 focus:outline-none focus:border-blue-600 resize-none"
                   />
                 </div>
@@ -3050,6 +3198,7 @@ function AdminContent() {
                     </label>
                     <Input
                       type="date"
+                      fieldName="Scheduled Date"
                       required
                       value={taskDate}
                       onChange={(e) => setTaskDate(e.target.value)}
@@ -3063,6 +3212,7 @@ function AdminContent() {
                     </label>
                     <Input
                       type="time"
+                      fieldName="Scheduled Time"
                       required
                       value={taskTime}
                       onChange={(e) => setTaskTime(e.target.value)}
@@ -3177,6 +3327,7 @@ function AdminContent() {
                   <label className="text-[11px] font-semibold text-slate-600">Task Title <span className="text-rose-500 font-bold">*</span></label>
                   <Input
                     type="text"
+                    fieldName="Task Title"
                     required
                     value={editTaskTitle}
                     onChange={(e) => setEditTaskTitle(e.target.value)}
@@ -3191,7 +3342,12 @@ function AdminContent() {
                     rows={3}
                     required
                     value={editTaskDesc}
-                    onChange={(e) => setEditTaskDesc(e.target.value)}
+                    onChange={(e) => {
+                      e.currentTarget.setCustomValidity('');
+                      setEditTaskDesc(e.target.value);
+                    }}
+                    onInvalid={(e) => e.currentTarget.setCustomValidity('Please fill out Task Description.')}
+                    onInput={(e) => e.currentTarget.setCustomValidity('')}
                     className="w-full rounded-xl bg-white border border-slate-200 p-2.5 text-xs text-slate-900 focus:outline-none focus:border-blue-600 resize-none"
                   />
                 </div>
@@ -3202,6 +3358,7 @@ function AdminContent() {
                     <label className="text-[11px] font-semibold text-slate-600">Date <span className="text-rose-500 font-bold">*</span></label>
                     <Input
                       type="date"
+                      fieldName="Scheduled Date"
                       required
                       value={editTaskDate}
                       onChange={(e) => setEditTaskDate(e.target.value)}
@@ -3212,6 +3369,7 @@ function AdminContent() {
                     <label className="text-[11px] font-semibold text-slate-600">Time <span className="text-rose-500 font-bold">*</span></label>
                     <Input
                       type="time"
+                      fieldName="Scheduled Time"
                       required
                       value={editTaskTime}
                       onChange={(e) => setEditTaskTime(e.target.value)}

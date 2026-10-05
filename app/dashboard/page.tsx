@@ -229,16 +229,17 @@ export default function DashboardPage() {
     };
   }, [user, isUser, isEmployee, profile?.department]);
 
-  // Urgent Department Requests (SLA approaching deadline <= 120m, overdue, or marked URGENT)
+  // Urgent Department Requests (SLA approaching deadline: <= 120m for URGENT, <= 50m for others, or overdue)
   const urgentDeptRequests = React.useMemo(() => {
     if (!isEmployee || !profile?.department) return [];
     return deptOpenRequests.filter(req => {
       if (req.status !== 'OPEN') return false;
       const deptMatch = req.categoryId?.trim().toLowerCase() === profile.department?.trim().toLowerCase();
       if (!deptMatch) return false;
-      if (req.isEscalated || req.priority === 'URGENT') return true;
       const mins = getMinutesUntilDeadline(req.date, req.startTime);
-      return mins !== null && mins <= 50;
+      if (mins === null) return false;
+      const threshold = req.priority === 'URGENT' ? 120 : 50;
+      return mins <= threshold;
     });
   }, [deptOpenRequests, isEmployee, profile?.department]);
 
@@ -319,41 +320,41 @@ export default function DashboardPage() {
           <div className="absolute top-0 right-0 -mr-16 -mt-16 w-60 h-60 bg-blue-500/8 rounded-full blur-2xl pointer-events-none" />
           <div className="absolute bottom-0 left-1/3 -mb-16 w-52 h-52 bg-indigo-500/8 rounded-full blur-2xl pointer-events-none" />
 
-          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="space-y-1.5 max-w-xl">
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-blue-50 rounded-full text-[11px] font-semibold text-blue-700 border border-blue-200/80">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+            <div className="space-y-2 max-w-xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 rounded-full text-xs font-semibold text-blue-700 border border-blue-200/80">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
                 <span>
                   {isUser ? 'Client Service Portal Live' : `${profile.department || 'Field'} Operations Terminal`}
                 </span>
               </div>
               
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 leading-snug">
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 leading-snug font-display">
                 Welcome back, <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">{profile.fullName}</span>
               </h1>
               
-              <p className="text-slate-600 text-xs sm:text-sm leading-relaxed">
+              <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
                 {isUser 
                   ? "Book and monitor professional neighborhood assistance across Medical, Groceries, Electrical, and Plumbing with verified 4-digit completion codes."
                   : `Serve verified requests in the ${profile.department} category, submit specialist proposals, and execute field missions.`}
               </p>
             </div>
 
-            <div className="flex items-center gap-2.5 shrink-0 pt-1 sm:pt-0">
+            <div className="flex items-center gap-3 shrink-0 pt-1 sm:pt-0">
               {isUser ? (
                 <>
                   <Button
                     onClick={() => openCreateRequest()}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 h-9 rounded-xl shadow-xs gap-1.5 transition-all text-xs cursor-pointer"
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4.5 h-10 sm:h-11 rounded-xl shadow-sm gap-2 transition-all text-sm cursor-pointer"
                   >
-                    <Plus className="w-4 h-4" />
+                    <Plus className="w-4.5 h-4.5" />
                     <span>Ask for Help</span>
                   </Button>
                   <Link
                     href="/tasks"
-                    className="px-3.5 h-9 inline-flex items-center gap-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 font-medium text-xs border border-slate-200 transition-all cursor-pointer"
+                    className="px-4 h-10 sm:h-11 inline-flex items-center gap-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 font-semibold text-sm border border-slate-200 transition-all cursor-pointer"
                   >
-                    <ClipboardList className="w-3.5 h-3.5 text-blue-600" />
+                    <ClipboardList className="w-4 h-4 text-blue-600" />
                     <span>My Requests</span>
                   </Link>
                 </>
@@ -361,16 +362,16 @@ export default function DashboardPage() {
                 <>
                   <Link
                     href="/discover"
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 h-9 rounded-xl shadow-xs gap-1.5 inline-flex items-center transition-all text-xs cursor-pointer"
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4.5 h-10 sm:h-11 rounded-xl shadow-sm gap-2 inline-flex items-center transition-all text-sm cursor-pointer"
                   >
-                    <Navigation className="w-3.5 h-3.5" />
+                    <Navigation className="w-4 h-4" />
                     <span>Claim Department Jobs</span>
                   </Link>
                   <Link
                     href="/tasks"
-                    className="px-3.5 h-9 inline-flex items-center gap-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 font-medium text-xs border border-slate-200 transition-all cursor-pointer"
+                    className="px-4 h-10 sm:h-11 inline-flex items-center gap-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 font-semibold text-sm border border-slate-200 transition-all cursor-pointer"
                   >
-                    <ClipboardList className="w-3.5 h-3.5 text-blue-600" />
+                    <ClipboardList className="w-4 h-4 text-blue-600" />
                     <span>My Missions</span>
                   </Link>
                 </>
@@ -591,7 +592,8 @@ export default function DashboardPage() {
                 );
                 const distFormatted = formatDistance(dist);
                 const minutesLeft = getMinutesUntilDeadline(request.date, request.startTime);
-                const isUrgentSla = request.isEscalated || (request.status === 'OPEN' && (request.priority === 'URGENT' || (minutesLeft !== null && minutesLeft <= 50)));
+                const slaThreshold = request.priority === 'URGENT' ? 120 : 50;
+                const isUrgentSla = request.status === 'OPEN' && minutesLeft !== null && minutesLeft <= slaThreshold;
 
                 return (
                   <div 

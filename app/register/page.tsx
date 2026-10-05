@@ -37,6 +37,16 @@ export default function Register() {
     return () => unsub();
   }, []);
 
+  // Reset inputs on initial mount so previously typed or autofilled data does not linger
+  useEffect(() => {
+    setFullName('');
+    setEmail('');
+    setPhone('');
+    setPassword('');
+    setConfirmPassword('');
+    setError('');
+  }, []);
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -51,20 +61,44 @@ export default function Register() {
     e.preventDefault();
     setError('');
     
-    if (password !== confirmPassword) {
-      setError('Passwords do not match.');
+    if (!fullName.trim()) {
+      setError('Please fill out Full Name.');
+      return;
+    }
+
+    if (!email.trim()) {
+      setError('Please fill out Email Address.');
       return;
     }
 
     // Validate phone number - exactly 10 digits
     const cleanedPhone = phone.replace(/\D/g, '');
+    if (!cleanedPhone) {
+      setError('Please fill out Phone Number.');
+      return;
+    }
     if (cleanedPhone.length !== 10) {
       setError('Phone number must be exactly 10 digits.');
       return;
     }
 
     if (!area) {
-      setError('Please select or confirm your neighborhood location.');
+      setError('Please fill out Neighborhood Location.');
+      return;
+    }
+
+    if (!password) {
+      setError('Please fill out Password.');
+      return;
+    }
+
+    if (!confirmPassword) {
+      setError('Please fill out Confirm Password.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
       return;
     }
 
@@ -143,37 +177,44 @@ export default function Register() {
       </div>
 
       {/* Right Panel - Form Container */}
-      <div className="flex-1 flex flex-col justify-center items-center p-5 sm:p-8 z-10 min-h-screen overflow-y-auto">
-        <div className="w-full max-w-md space-y-5 py-6">
+      <div className="flex-1 flex flex-col justify-center items-center p-6 sm:p-10 z-10 min-h-screen overflow-y-auto">
+        <div className="w-full max-w-lg space-y-6 py-8">
           
           {/* Mobile Header */}
-          <div className="lg:hidden flex flex-col items-center gap-2 text-center mb-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-xs">
-              <HandHeart className="h-5 w-5" />
+          <div className="lg:hidden flex flex-col items-center gap-2 text-center mb-2">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-sm">
+              <HandHeart className="h-6 w-6" />
             </div>
-            <span className="text-xl font-bold tracking-tight text-slate-900">
+            <span className="text-2xl font-bold tracking-tight text-slate-900 font-display">
               Localend<span className="text-blue-600">.</span>
             </span>
           </div>
 
-          <div className="space-y-1 text-center lg:text-left">
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900">Create Account</h2>
-            <p className="text-slate-500 text-xs">Join the mutual aid community in just under a minute.</p>
+          <div className="space-y-2 text-center lg:text-left">
+            <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 font-display">Create Account</h2>
+            <p className="text-slate-500 text-sm sm:text-base leading-relaxed">Join the mutual aid community in just under a minute.</p>
           </div>
 
-          <div className="bg-white border border-slate-200/85 rounded-2xl p-5 sm:p-6 shadow-xs backdrop-blur-xl">
-            <form onSubmit={handleRegister} className="space-y-3.5">
+          <div className="bg-white border border-slate-200/90 rounded-2xl p-6 sm:p-8 shadow-sm backdrop-blur-xl">
+            <form onSubmit={handleRegister} autoComplete="off" className="space-y-4">
+              {error && (
+                <div className="bg-rose-50 border border-rose-200 text-rose-700 p-3.5 rounded-xl text-sm font-medium flex items-start gap-2.5 animate-in fade-in">
+                  <ShieldCheck className="h-4 w-4 shrink-0 text-rose-500 mt-0.5" />
+                  <span>{error}</span>
+                </div>
+              )}
+
               {/* Account Type / Role Selector */}
               <div className="space-y-1.5">
-                <label className="text-[11px] font-semibold text-slate-600">Register As</label>
-                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
+                <label className="text-xs sm:text-sm font-semibold text-slate-700">Register As</label>
+                <div className="grid grid-cols-2 gap-2 p-1.5 bg-slate-100 rounded-xl">
                   <button
                     type="button"
                     onClick={() => setRole('user')}
                     className={cn(
-                      "py-1.5 text-xs font-semibold rounded-lg transition-all",
+                      "py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all cursor-pointer",
                       role === 'user'
-                        ? "bg-white text-blue-600 shadow-xs"
+                        ? "bg-white text-blue-600 shadow-sm"
                         : "text-slate-600 hover:text-slate-900"
                     )}
                   >
@@ -183,9 +224,9 @@ export default function Register() {
                     type="button"
                     onClick={() => setRole('employee')}
                     className={cn(
-                      "py-1.5 text-xs font-semibold rounded-lg transition-all",
+                      "py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all cursor-pointer",
                       role === 'employee'
-                        ? "bg-white text-indigo-600 shadow-xs"
+                        ? "bg-white text-indigo-600 shadow-sm"
                         : "text-slate-600 hover:text-slate-900"
                     )}
                   >
@@ -196,15 +237,15 @@ export default function Register() {
 
               {/* Department Dropdown for Employee */}
               {role === 'employee' && (
-                <div className="space-y-1 p-3 bg-indigo-50/60 border border-indigo-100 rounded-xl animate-in fade-in">
-                  <label className="text-[11px] font-semibold text-indigo-900 flex items-center justify-between">
+                <div className="space-y-1.5 p-3.5 bg-indigo-50/60 border border-indigo-100 rounded-xl animate-in fade-in">
+                  <label className="text-xs sm:text-sm font-semibold text-indigo-900 flex items-center justify-between">
                     <span>Assigned Department</span>
-                    <span className="text-[10px] text-indigo-600">Only receive tasks in this category</span>
+                    <span className="text-xs text-indigo-600 font-normal">Only receive tasks in this category</span>
                   </label>
                   <select
                     value={department}
                     onChange={(e) => setDepartment(e.target.value)}
-                    className="w-full h-9 rounded-xl bg-white border border-indigo-200 text-slate-900 text-xs px-3 focus:outline-none focus:border-indigo-600 font-medium"
+                    className="w-full h-11 rounded-xl bg-white border border-indigo-200 text-slate-900 text-sm px-3.5 focus:outline-none focus:border-indigo-600 font-medium cursor-pointer"
                   >
                     {departmentList.map((dept) => (
                       <option key={dept.id || dept.name} value={dept.name || dept.id}>
@@ -215,36 +256,71 @@ export default function Register() {
                 </div>
               )}
 
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-slate-600">Full Name</label>
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <label htmlFor="register-name" className="text-xs sm:text-sm font-semibold text-slate-700">Full Name</label>
+                  {fullName && (
+                    <button
+                      type="button"
+                      onClick={() => setFullName('')}
+                      className="text-xs text-blue-600 hover:text-blue-700 font-medium hover:underline cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
                 <Input
+                  id="register-name"
+                  name="fullName"
+                  fieldName="Full Name"
                   type="text"
                   required
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="Alex Mercer"
-                  className="h-9 rounded-xl bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 text-xs"
+                  autoComplete="off"
+                  showClear
+                  className="h-11 rounded-xl bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 text-sm sm:text-base"
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-600">Email Address</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <label htmlFor="register-email" className="text-xs sm:text-sm font-semibold text-slate-700">Email Address</label>
+                    {email && (
+                      <button
+                        type="button"
+                        onClick={() => setEmail('')}
+                        className="text-xs text-blue-600 hover:text-blue-700 font-medium hover:underline cursor-pointer"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
                   <Input
+                    id="register-email"
+                    name="email"
+                    fieldName="Email Address"
                     type="email"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="alex@example.com"
-                    className="h-9 rounded-xl bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 text-xs"
+                    autoComplete="off"
+                    showClear
+                    className="h-11 rounded-xl bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 text-sm sm:text-base"
                   />
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <div className="flex justify-between items-center">
-                    <label className="text-[11px] font-semibold text-slate-600">Phone</label>
-                    <span className="text-[10px] text-blue-600 font-mono">10 digits</span>
+                    <label htmlFor="register-phone" className="text-xs sm:text-sm font-semibold text-slate-700">Phone</label>
+                    <span className="text-xs text-blue-600 font-mono">10 digits</span>
                   </div>
                   <Input
+                    id="register-phone"
+                    name="phone"
+                    fieldName="Phone Number"
                     type="tel"
                     inputMode="numeric"
                     maxLength={10}
@@ -252,14 +328,16 @@ export default function Register() {
                     value={phone}
                     onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
                     placeholder="9876543210"
-                    className="h-9 rounded-xl bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 text-xs font-mono"
+                    autoComplete="off"
+                    showClear
+                    className="h-11 rounded-xl bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 text-sm sm:text-base font-mono"
                   />
                 </div>
               </div>
 
-              <div className="space-y-1 pt-0.5">
-                <label className="text-[11px] font-semibold text-slate-600 flex items-center gap-1.5">
-                  <MapPin className="w-3 h-3 text-blue-600" />
+              <div className="space-y-1.5 pt-1">
+                <label className="text-xs sm:text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+                  <MapPin className="w-4 h-4 text-blue-600" />
                   Neighborhood Location
                 </label>
                 <LocationPicker 
@@ -270,44 +348,56 @@ export default function Register() {
                 />
               </div>
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-0.5">
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-600">Password</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+                <div className="space-y-1.5">
+                  <label htmlFor="register-password" className="text-xs sm:text-sm font-semibold text-slate-700">Password</label>
                   <div className="relative">
                     <Input
+                      id="register-password"
+                      name="password"
+                      fieldName="Password"
                       type={showPassword ? "text" : "password"}
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="h-9 rounded-xl bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 text-xs font-mono pr-9"
+                      autoComplete="new-password"
+                      className="h-11 rounded-xl bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 text-sm sm:text-base font-mono pr-10"
                     />
                     <button
                       type="button"
+                      tabIndex={-1}
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none transition-colors"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none transition-colors cursor-pointer p-1"
+                      title={showPassword ? "Hide password" : "Show password"}
                     >
-                      {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-600">Confirm Password</label>
+                <div className="space-y-1.5">
+                  <label htmlFor="register-confirm-password" className="text-xs sm:text-sm font-semibold text-slate-700">Confirm Password</label>
                   <div className="relative">
                     <Input
+                      id="register-confirm-password"
+                      name="confirmPassword"
+                      fieldName="Confirm Password"
                       type={showConfirmPassword ? "text" : "password"}
                       required
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="h-9 rounded-xl bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 text-xs font-mono pr-9"
+                      autoComplete="new-password"
+                      className="h-11 rounded-xl bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 text-sm sm:text-base font-mono pr-10"
                     />
                     <button
                       type="button"
+                      tabIndex={-1}
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none transition-colors"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none transition-colors cursor-pointer p-1"
+                      title={showConfirmPassword ? "Hide password" : "Show password"}
                     >
-                      {showConfirmPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
                 </div>
@@ -315,16 +405,16 @@ export default function Register() {
               
               <Button 
                 type="submit" 
-                className="w-full h-9 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-all cursor-pointer mt-2" 
+                className="w-full h-11 rounded-xl text-sm sm:text-base font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all cursor-pointer mt-3" 
                 disabled={loading}
               >
                 {loading ? 'Registering...' : 'Complete Registration'}
-                {!loading && <ArrowRight className="ml-1.5 h-3.5 w-3.5" />}
+                {!loading && <ArrowRight className="ml-2 h-4 w-4" />}
               </Button>
             </form>
           </div>
 
-          <p className="text-center text-xs text-slate-600">
+          <p className="text-center text-sm text-slate-600">
             Already registered?{' '}
             <Link href="/login" className="font-semibold text-blue-600 hover:text-blue-700 hover:underline">
               Access account

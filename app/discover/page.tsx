@@ -250,16 +250,17 @@ export default function DiscoverPage() {
 
   const [claimingEmergencyId, setClaimingEmergencyId] = useState<string | null>(null);
 
-  // Urgent Department Requests for Employee (SLA approaching deadline <= 120m, overdue, or marked URGENT)
+  // Urgent Department Requests for Employee (SLA approaching deadline: <= 120m for URGENT, <= 50m for others, or overdue)
   const urgentDeptRequests = useMemo(() => {
     if (profile?.role !== 'employee' || !profile?.department) return [];
     return requests.filter(req => {
       if (req.status !== 'OPEN') return false;
       const deptMatch = req.categoryId?.trim().toLowerCase() === profile.department?.trim().toLowerCase();
       if (!deptMatch) return false;
-      if (req.isEscalated || req.priority === 'URGENT') return true;
       const mins = getMinutesUntilDeadline(req.date, req.startTime);
-      return mins !== null && mins <= 50;
+      if (mins === null) return false;
+      const threshold = req.priority === 'URGENT' ? 120 : 50;
+      return mins <= threshold;
     });
   }, [requests, profile?.role, profile?.department]);
 
@@ -532,7 +533,8 @@ export default function DiscoverPage() {
             {filteredRequests.map((request) => {
               const isOwner = user && request.requesterId === user.uid;
               const minsLeft = getMinutesUntilDeadline(request.date, request.startTime);
-              const isUrgentSla = request.isEscalated || (request.status === 'OPEN' && (request.priority === 'URGENT' || (minsLeft !== null && minsLeft <= 50)));
+              const slaThreshold = request.priority === 'URGENT' ? 120 : 50;
+              const isUrgentSla = request.status === 'OPEN' && minsLeft !== null && minsLeft <= slaThreshold;
 
               return (
                 <div

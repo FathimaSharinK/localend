@@ -6,6 +6,11 @@
     --font-display: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
 
+  html {
+    font-size: 16px;
+    -webkit-text-size-adjust: 100%;
+  }
+
   body {
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
@@ -13,13 +18,14 @@
     -webkit-tap-highlight-color: transparent;
     color: #0f172a;
     background-color: #f8fafc;
-    font-size: 0.875rem;
-    line-height: 1.5;
+    font-size: 1rem;
+    line-height: 1.6;
+    letter-spacing: -0.011em;
   }
 
   h1, h2, h3, h4, .font-display {
     font-family: var(--font-display);
-    letter-spacing: -0.02em;
+    letter-spacing: -0.025em;
   }
 }
 
@@ -29,18 +35,16 @@ input::-ms-clear {
   display: none;
 }
 
-/* Normalize browser autofill styling to match clean design */
+/* Clean, crisp browser autofill styling that prevents static frozen appearance */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
 input:-webkit-autofill:active {
-  -webkit-box-shadow: 0 0 0 30px #f8fafc inset !important;
+  -webkit-box-shadow: 0 0 0 40px #ffffff inset !important;
   -webkit-text-fill-color: #0f172a !important;
-  transition: background-color 5000s ease-in-out 0s;
-}
-
-input:focus:-webkit-autofill {
-  -webkit-box-shadow: 0 0 0 30px #ffffff inset !important;
+  caret-color: #0f172a !important;
+  font-family: inherit !important;
+  font-size: inherit !important;
 }
 
 /* Premium Client-Grade Glassmorphism & Cards */
