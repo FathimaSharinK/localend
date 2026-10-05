@@ -1,6 +1,12 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Allow public read for departments so guests on register page can select their department
+    match /departments/{deptId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
     // Allow authenticated users full read and write access across collections
     match /{document=**} {
       allow read, write: if request.auth != null;

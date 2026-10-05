@@ -77,6 +77,9 @@ export const directAcceptTask = async (
       helperId: helper.uid,
       helperName: helper.fullName,
       title: currentData.title,
+      description: currentData.description || '',
+      category: currentData.categoryId || 'General',
+      priority: currentData.priority || 'NORMAL',
       scheduledDate: currentData.date,
       scheduledTime: currentData.startTime,
       location: currentData.location,
@@ -100,6 +103,141 @@ export const directAcceptTask = async (
     return generatedCode;
   });
 };
+
+export const directDispatchByAdmin = async (
+  request: HelpRequest,
+  employee: { uid: string; fullName: string; department?: string }
+): Promise<string> => {
+  if (!request.id) throw new Error('Request ID is required');
+
+  const { runTransaction } = await import('firebase/firestore');
+
+  const finalCode = await runTransaction(db, async (transaction) => {
+    const requestRef = doc(db, 'helpRequests', request.id!);
+    const requestSnap = await transaction.get(requestRef);
+
+    if (!requestSnap.exists()) {
+      throw new Error('This request no longer exists.');
+    }
+
+    const currentData = requestSnap.data() as HelpRequest;
+    const generatedCode = Math.floor(1000 + Math.random() * 9000).toString();
+
+    // 1. Update helpRequests
+    transaction.update(requestRef, {
+      status: 'IN_PROGRESS',
+      selectedHelperId: employee.uid,
+      selectedHelperName: employee.fullName,
+      completionCode: generatedCode,
+      dispatchedByAdmin: true,
+      isEscalated: false,
+      updatedAt: new Date().toISOString()
+    });
+
+    // 2. Create helpTasks
+    const taskRef = doc(collection(db, 'helpTasks'));
+    transaction.set(taskRef, {
+      requestId: request.id,
+      requesterId: currentData.requesterId,
+      requesterName: currentData.requesterName,
+      helperId: employee.uid,
+      helperName: employee.fullName,
+      title: currentData.title,
+      description: currentData.description || '',
+      category: currentData.categoryId || 'General',
+      priority: currentData.priority || 'URGENT',
+      scheduledDate: currentData.date,
+      scheduledTime: currentData.startTime,
+      location: currentData.location,
+      status: 'IN_PROGRESS',
+      completionCode: generatedCode,
+      createdAt: new Date().toISOString()
+    });
+
+    // 3. Notify requester
+    const notifRef = doc(collection(db, 'notifications'));
+    transaction.set(notifRef, {
+      userId: currentData.requesterId,
+      title: '🚨 Admin Dispatched a Specialist!',
+      message: `Platform Admin assigned ${employee.fullName} (${employee.department || 'Specialist'}) to your urgent request "${currentData.title}". Handshake code: ${generatedCode}`,
+      read: false,
+      type: 'DISPATCH_ASSIGNED',
+      relatedId: request.id,
+      createdAt: new Date().toISOString()
+    });
+
+    // 4. Notify employee
+    const empNotifRef = doc(collection(db, 'notifications'));
+    transaction.set(empNotifRef, {
+      userId: employee.uid,
+      title: '🚨 Urgent Admin Dispatch Assignment!',
+      message: `You have been directly assigned to urgent task "${currentData.title}" at ${currentData.location}. Please open Task Chat.`,
+      read: false,
+      type: 'DISPATCH_ASSIGNED',
+      relatedId: request.id,
+      createdAt: new Date().toISOString()
+    });
+
+    return generatedCode;
+  });
+
+  // 5. Dispatch Rich Email Alert with full Citizen and Specialist information
+  try {
+    const { getDoc } = await import('firebase/firestore');
+    const requesterDoc = await getDoc(doc(db, 'users', request.requesterId));
+    const requesterData = requesterDoc.exists() ? requesterDoc.data() : null;
+    const employeeDoc = await getDoc(doc(db, 'users', employee.uid));
+    const employeeData = employeeDoc.exists() ? employeeDoc.data() : null;
+
+    const recipientEmails: string[] = [];
+    if (employeeData?.email) recipientEmails.push(employeeData.email);
+    if ((employee as any).email && !recipientEmails.includes((employee as any).email)) {
+      recipientEmails.push((employee as any).email);
+    }
+    if (requesterData?.email && !recipientEmails.includes(requesterData.email)) {
+      recipientEmails.push(requesterData.email);
+    }
+
+    fetch('/api/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        alertNature: 'DISPATCH_ASSIGNED',
+        alertTitle: `Direct Dispatch: ${employee.fullName} assigned to "${request.title}"`,
+        alertReason: `An administrator has directly dispatched technician ${employee.fullName} (${employee.department || 'Specialist'}) to resolve this urgent community request.`,
+        alertSeverity: 'HIGH',
+        taskId: request.id,
+        taskTitle: request.title,
+        taskDescription: request.description,
+        category: request.categoryId,
+        location: request.location,
+        coordinates: request.coordinates,
+        scheduledDate: request.date,
+        scheduledTime: request.startTime,
+        priority: request.priority,
+        status: 'IN_PROGRESS',
+        requesterId: request.requesterId,
+        requesterName: requesterData?.fullName || request.requesterName,
+        requesterEmail: requesterData?.email,
+        requesterPhone: requesterData?.phone,
+        requesterArea: requesterData?.area || request.location,
+        assignedHelperId: employee.uid,
+        assignedHelperName: employee.fullName,
+        assignedHelperDepartment: employee.department,
+        assignedHelperPhone: employeeData?.phone,
+        handshakeCode: finalCode,
+        recipientEmails
+      })
+    }).catch(err => {
+      console.warn('Dispatch email warning:', err);
+    });
+  } catch (err) {
+    console.warn('Failed to trigger dispatch email notification:', err);
+  }
+
+  return finalCode;
+};
+
 
 export const verifyHandshakeCode = async (
   requestId: string,

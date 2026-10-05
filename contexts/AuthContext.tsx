@@ -5,6 +5,8 @@ import { User, onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../lib/firebase/client";
 
+import { UserRole, Department, UserStatus } from "@/types";
+
 export interface UserProfile {
   uid: string;
   fullName: string;
@@ -13,7 +15,9 @@ export interface UserProfile {
   area?: string;
   phone?: string;
   bio?: string;
-  role?: 'admin' | 'user';
+  role?: UserRole;
+  department?: Department;
+  status?: UserStatus;
   coordinates?: { lat: number; lng: number } | null;
   createdAt?: string;
   updatedAt?: string;
@@ -57,7 +61,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           email: 'admin@gmail.com',
           role: 'admin',
           onboardingCompleted: true,
-          area: 'Community Headquarters'
+          area: 'Community Headquarters',
+          status: 'active'
         });
       } else {
         setProfile(null);

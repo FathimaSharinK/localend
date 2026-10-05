@@ -1,36 +1,39 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { collection, addDoc, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { HelpPriority, HelpRequest } from '@/types';
+import { HelpPriority, HelpRequest, DepartmentItem } from '@/types';
 import { X, Sparkles, MapPin, Calendar, Clock, AlertCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import LocationPicker from '@/components/location/LocationPicker';
-
-const CATEGORIES = [
-  'Moving', 
-  'Delivery', 
-  'Shopping', 
-  'Transportation', 
-  'Household', 
-  'Technical Help', 
-  'Education', 
-  'Errands', 
-  'Community Support', 
-  'Other'
-];
+import { REQUEST_CATEGORIES } from '@/data/categories';
+import { subscribeDepartments, DEFAULT_DEPARTMENTS } from '@/services/departments.service';
+import { resolveCoordinates } from '@/lib/distance';
 
 export default function CreateRequestModal({ onClose, editRequest }: { onClose: () => void, editRequest?: HelpRequest }) {
   const { user, profile } = useAuth();
   const router = useRouter();
   
+  const [departmentList, setDepartmentList] = useState<DepartmentItem[]>(DEFAULT_DEPARTMENTS);
   const [title, setTitle] = useState(editRequest?.title || '');
   const [description, setDescription] = useState(editRequest?.description || '');
-  const [category, setCategory] = useState(editRequest?.categoryId || CATEGORIES[0]);
+  const [category, setCategory] = useState(editRequest?.categoryId || 'Medical');
+
+  useEffect(() => {
+    const unsub = subscribeDepartments((depts) => {
+      if (depts && depts.length > 0) {
+        setDepartmentList(depts);
+        if (!editRequest && !category) {
+          setCategory(depts[0].name || depts[0].id || 'Medical');
+        }
+      }
+    });
+    return () => unsub();
+  }, [editRequest, category]);
   const [priority, setPriority] = useState<HelpPriority>(editRequest?.priority || 'NORMAL');
   const [date, setDate] = useState(editRequest?.date || '');
   const [time, setTime] = useState(editRequest?.startTime || '');
@@ -48,35 +51,67 @@ export default function CreateRequestModal({ onClose, editRequest }: { onClose: 
     e.preventDefault();
     if (!user || !profile) return;
     
-    setLoading(true);
     setError('');
+
+    if (!title.trim()) {
+      setError('Please fill out Request Title.');
+      return;
+    }
+    if (!description.trim()) {
+      setError('Please fill out Detailed Description.');
+      return;
+    }
+    if (!category) {
+      setError('Please select a Department / Category.');
+      return;
+    }
+    if (!priority) {
+      setError('Please select an Urgency Level.');
+      return;
+    }
+    if (!date) {
+      setError('Please fill out Target Date.');
+      return;
+    }
+    if (!time) {
+      setError('Please fill out Time Window.');
+      return;
+    }
+    if (!location.trim()) {
+      setError('Please fill out Location / Neighborhood Area.');
+      return;
+    }
+
+    setLoading(true);
+    const resolvedCoords = resolveCoordinates(coordinates, location.trim()) || profile?.coordinates || null;
 
     try {
       if (isEditing && editRequest.id) {
         await updateDoc(doc(db, 'helpRequests', editRequest.id), {
-          title,
-          description,
+          title: title.trim(),
+          description: description.trim(),
           categoryId: category,
           priority,
           date,
           startTime: time,
-          location,
-          coordinates: coordinates || profile?.coordinates || null,
+          location: location.trim(),
+          coordinates: resolvedCoords,
           updatedAt: new Date().toISOString()
         });
       } else {
         await addDoc(collection(db, 'helpRequests'), {
           requesterId: user.uid,
           requesterName: profile.fullName || 'Neighbor',
-          title,
-          description,
+          title: title.trim(),
+          description: description.trim(),
           categoryId: category,
           priority,
           date,
           startTime: time,
-          location,
-          coordinates: coordinates || profile?.coordinates || null,
+          location: location.trim(),
+          coordinates: resolvedCoords,
           status: 'OPEN',
+          isEscalated: false,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         });
@@ -128,65 +163,96 @@ export default function CreateRequestModal({ onClose, editRequest }: { onClose: 
         </div>
         
         {/* Scrollable Form Body */}
-        <div className="overflow-y-auto p-4 sm:p-5 space-y-3.5 flex-1 custom-scrollbar">
-          <form id="create-request-form" onSubmit={handleSubmit} className="space-y-3">
+        <div className="overflow-y-auto p-4 sm:p-5 space-y-4 flex-1 custom-scrollbar">
+          <form id="create-request-form" onSubmit={handleSubmit} autoComplete="off" className="space-y-4">
             {error && (
-              <div className="text-xs font-semibold text-rose-600 bg-rose-50 p-2.5 rounded-xl border border-rose-200 flex items-center gap-2">
+              <div className="text-sm font-medium text-rose-700 bg-rose-50 p-3 rounded-xl border border-rose-200 flex items-center gap-2.5">
                 <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
                 <span>{error}</span>
               </div>
             )}
             
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-slate-600">Request Title</label>
+            <div className="space-y-1.5">
+              <label className="text-xs sm:text-sm font-semibold text-slate-700 flex items-center gap-1">
+                <span>Request Title</span>
+                <span className="text-rose-500 font-bold">*</span>
+              </label>
               <Input
                 type="text"
+                fieldName="Request Title"
                 required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g., Need help moving heavy sofa down 2 floors"
-                className="h-9 rounded-xl bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 text-xs"
+                autoComplete="off"
+                showClear
+                className="h-10 rounded-xl bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 text-sm"
               />
             </div>
             
             <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-slate-600">Detailed Description</label>
+              <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1">
+                <span>Detailed Description</span>
+                <span className="text-rose-500 font-bold">*</span>
+              </label>
               <textarea
                 className="flex min-h-[75px] w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-blue-600 transition-all resize-none"
                 required
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(e) => {
+                  e.currentTarget.setCustomValidity('');
+                  setDescription(e.target.value);
+                }}
+                onInvalid={(e) => e.currentTarget.setCustomValidity('Please fill out Detailed Description.')}
+                onInput={(e) => e.currentTarget.setCustomValidity('')}
                 placeholder="Describe any tools needed, exact stair flights, timeline flexibility..."
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[11px] font-semibold text-slate-600">Category</label>
-              <div className="flex flex-wrap gap-1.5">
-                {CATEGORIES.map((cat) => (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => setCategory(cat)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                      category === cat
-                        ? 'bg-blue-600 text-white shadow-2xs'
-                        : 'bg-slate-100 border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                ))}
+              <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1">
+                <span>Select Department / Category</span>
+                <span className="text-rose-500 font-bold">*</span>
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {departmentList.map((dept) => {
+                  const deptKey = dept.name || dept.id;
+                  const isSelected = category.toLowerCase() === deptKey.toLowerCase();
+                  return (
+                    <button
+                      key={dept.id || dept.name}
+                      type="button"
+                      onClick={() => setCategory(deptKey)}
+                      className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'bg-slate-100 border border-slate-200/80 text-slate-700 hover:text-slate-900 hover:bg-slate-200/70'
+                      }`}
+                    >
+                      <span>{dept.icon || '🛠️'}</span>
+                      <span className="truncate">{dept.name}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
               <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-slate-600">Urgency Level</label>
+                <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1">
+                  <span>Urgency Level</span>
+                  <span className="text-rose-500 font-bold">*</span>
+                </label>
                 <select
+                  required
                   className="flex h-9 w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600 transition-all"
                   value={priority}
-                  onChange={(e) => setPriority(e.target.value as HelpPriority)}
+                  onChange={(e) => {
+                    e.currentTarget.setCustomValidity('');
+                    setPriority(e.target.value as HelpPriority);
+                  }}
+                  onInvalid={(e) => e.currentTarget.setCustomValidity('Please select an Urgency Level.')}
+                  onInput={(e) => e.currentTarget.setCustomValidity('')}
                 >
                   <option value="LOW">🟢 Low Priority</option>
                   <option value="NORMAL">🔵 Normal Priority</option>
@@ -196,36 +262,43 @@ export default function CreateRequestModal({ onClose, editRequest }: { onClose: 
               </div>
 
               <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-slate-600 flex items-center gap-1">
-                  <Calendar className="w-3 h-3 text-blue-600" /> Target Date
+                <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1">
+                  <Calendar className="w-3 h-3 text-blue-600" />
+                  <span>Target Date</span>
+                  <span className="text-rose-500 font-bold">*</span>
                 </label>
                 <Input
                   type="date"
+                  fieldName="Target Date"
                   required
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  className="h-9 rounded-xl bg-slate-50 border-slate-200 text-slate-900 text-xs focus:bg-white"
+                  className="h-9 rounded-xl bg-slate-50 border-slate-200 text-slate-900 text-xs focus:bg-white font-mono"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-slate-600 flex items-center gap-1">
-                  <Clock className="w-3 h-3 text-blue-600" /> Time Window
+                <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-blue-600" />
+                  <span>Time Window</span>
+                  <span className="text-rose-500 font-bold">*</span>
                 </label>
                 <Input
                   type="time"
+                  fieldName="Time Window"
                   required
                   value={time}
                   onChange={(e) => setTime(e.target.value)}
-                  className="h-9 rounded-xl bg-slate-50 border-slate-200 text-slate-900 text-xs focus:bg-white"
+                  className="h-9 rounded-xl bg-slate-50 border-slate-200 text-slate-900 text-xs focus:bg-white font-mono"
                 />
               </div>
             </div>
 
             <div className="space-y-1">
               <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1.5">
-                <MapPin className="w-3 h-3 text-emerald-600" />
-                Location / Neighborhood Area
+                <MapPin className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Location / Neighborhood Area</span>
+                <span className="text-rose-500 font-bold">*</span>
               </label>
               <LocationPicker 
                 defaultLocation={location}
