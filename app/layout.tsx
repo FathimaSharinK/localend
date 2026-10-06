@@ -1,24 +1,9 @@
 import React from "react";
 import type { Metadata, Viewport } from "next";
-import { Plus_Jakarta_Sans, Outfit } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ModalProvider } from "@/contexts/ModalContext";
 import SlaHeartbeat from "@/components/sla/SlaHeartbeat";
-
-const plusJakartaSans = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  variable: "--font-sans",
-  display: "swap",
-  weight: ["300", "400", "500", "600", "700", "800"],
-});
-
-const outfit = Outfit({
-  subsets: ["latin"],
-  variable: "--font-display",
-  display: "swap",
-  weight: ["400", "500", "600", "700", "800", "900"],
-});
 
 export const metadata: Metadata = {
   title: "Localend - Futuristic Community Platform",
@@ -45,7 +30,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${plusJakartaSans.variable} ${outfit.variable}`}>
+    <html lang="en">
       <body className="antialiased min-h-screen bg-[#f8fafc] text-slate-900">
         <AuthProvider>
           <ModalProvider>
